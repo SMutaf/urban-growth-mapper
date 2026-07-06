@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: urban_growth_mapper
+    ports:
+      # Host port 5433, not 5432: this machine already runs a native Windows
+      # PostgreSQL service on 5432, which silently wins that port and made
+      # every client connection hit the wrong server.
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:

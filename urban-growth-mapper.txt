@@ -1,0 +1,157 @@
+================================================================================
+PROJE FİKİR DOKÜMANI: YAPAY ZEKA DESTEKLİ ŞEHİR BÜYÜME AKSI VE ARSA DEĞERLEME PLATFORMU
+================================================================================
+
+1. PROJE ÖZETİ VE VİZYON
+--------------------------------------------------------------------------------
+Bu proje; Türkiye haritası üzerinde devlet tarafından hayata geçirilen veya planlanan
+büyük altyapı projelerini (otobanlar, YHT hatları, limanlar, organize sanayi bölgeleri vb.)
+görselleştiren; Coğrafi Bilgi Sistemleri (CBS) tabanlı kural bazlı (rule-based) bir
+algoritma ile şehirlerin hangi yöne doğru büyüyeceğini ve hangi bölgelerin değer
+kazanma potansiyeli taşıdığını bir ısı haritası (heatmap) üzerinde gösteren bir karar
+destek platformudur.
+
+Sistemin çekirdek tahmin motoru LLM değil, tamamlanmış ve planlanan projelere olan
+mesafe/yakınlık gibi coğrafi metriklere dayanan kural bazlı bir skorlama algoritmasıdır.
+Yapay zeka (LLM), ileride eklenebilecek opsiyonel bir katman olarak, üretilen ısı
+haritasını ve ham verileri insan diline çevirip yorumlamak için kullanılacaktır;
+sistemin çalışması LLM'e bağımlı değildir.
+
+Henüz fikir aşamasında olan bu proje, veri mühendisliği, coğrafi veri analizi ve
+katmanlı yazılım mimarisi prensiplerinin birleşiminden oluşmaktadır.
+
+
+2. HEDEF KİTLE
+--------------------------------------------------------------------------------
+* Gayrimenkul Danışmanları ve Emlakçılar (MVP'nin ilk test kullanıcı grubu, Sakarya bölgesi)
+* Bireysel Gayrimenkul Yatırımcıları
+* İnşaat ve Geliştirme Firmaları
+* Geleceğe Yönelik Stratejik Yatırım Yapmak İsteyen Girişimciler
+
+
+3. PİLOT BÖLGE (MVP KAPSAMI)
+--------------------------------------------------------------------------------
+Pilot şehir: SAKARYA
+
+Gerekçe: Geliştiricinin şehri bizzat tanıması sayesinde algoritmanın ürettiği ısı
+haritası sonuçları sahada doğrulanabilecek; ayrıca yerel emlakçılara doğrudan erişim
+sayesinde MVP gerçek kullanıcılarla test edilebilecektir. İstanbul-Ankara YHT hattı ve
+OSB projeleri sayesinde şehir, büyüme aksı analizi için yeterli veri zenginliğine
+sahiptir.
+
+
+4. ANA VERİ KAYNAKLARI (DATA INGESTION)
+--------------------------------------------------------------------------------
+MVP KAPSAMINDA (Sakarya'ya özel, manuel giriş):
+   - Sakarya'ya ait 3-4 büyük altyapı/yatırım projesinin koordinatları (YHT, otoban, OSB
+     vb.) manuel olarak veri tabanına işlenecek.
+   - TÜİK: Sakarya'ya ait nüfus artış hızı ve göç yönü verileri (skorlama algoritmasına
+     girdi olarak).
+
+MVP SONRASI / GELECEK FAZ:
+   - Karayolları Genel Müdürlüğü (KGM) & TCDD: Devam eden ve ihale aşamasındaki projeler
+     (otomatik veri çekimi / scraping).
+   - ÇED Raporları (Çevre, Şehircilik ve İklim Değişikliği Bakanlığı): Projelerin henüz
+     fikir/onay aşamasındaki tam koordinatları (KML/GeoJSON).
+   - Resmi Gazete: Kamulaştırma kararları ve imar değişiklikleri.
+   - Cumhurbaşkanlığı Yatırım Programı: Yıllık bütçe ve yatırım planları.
+   - OpenStreetMap (OSM): Yol, nehir, sınır ve bina verileri.
+   - Emlak İlan Siteleri: Bölgesel arsa/arazi metrekare fiyat geçmişi (trend analizi için).
+
+NOT: MVP'de "satılık arsa/ilan" gösterimi kapsam dışıdır. Platform, belirli parselleri
+değil, ısı haritası üzerinde değerlenme potansiyeli taşıyan BÖLGELERİ gösterir.
+
+
+5. TEKNOLOJİ YIĞINI (TECH STACK) — KESİNLEŞTİRİLDİ
+--------------------------------------------------------------------------------
+* Backend API: Python (FastAPI) — tek servis, katmanlı mimari (bkz. Bölüm 7)
+* Veri Tabanı: PostgreSQL + PostGIS
+* Frontend: React.js
+* Harita Kütüphanesi: Leaflet.js (+ Leaflet.heat ısı haritası eklentisi)
+* Yapay Zeka / LLM: MVP'de YOK. Mimari, ileride bir LLM sağlayıcısının (Claude API,
+  OpenAI API, yerel model) arayüz (interface) üzerinden eklenebileceği şekilde
+  tasarlanacak (bkz. Bölüm 7 — Dependency Inversion).
+
+
+6. ÇEKİRDEK ALGORİTMA: KURAL BAZLI ISI HARİTASI (MVP MOTORU)
+--------------------------------------------------------------------------------
+İşleyiş Mantığı:
+1. Sakarya haritası üzerinde bir ızgara (grid) veya mahalle bazlı bölgeler tanımlanır.
+2. Her bölge için, tamamlanmış ve planlanan projelere olan mesafe/yakınlık hesaplanır
+   (PostGIS mesafe fonksiyonları ile).
+3. Yakınlık, proje türü/önem ağırlığı (örn. YHT istasyonu vs. tali yol) ve nüfus/göç
+   verileri birleştirilerek her bölge için bir "büyüme skoru" üretilir.
+4. Skorlar Leaflet.heat ile ısı haritası olarak görselleştirilir: skoru yüksek bölgeler
+   sıcak (kırmızı/turuncu), düşük bölgeler soğuk (mavi/yeşil) renkte gösterilir.
+5. Isı haritasının "sıcak" bölgelerinde kalan arsa/araziler, değerlenme ihtimali taşıyan
+   alanlar olarak yorumlanır.
+
+LLM'in (ileride eklenirse) rolü, bu skorlama sonucunu ve ham proje verisini alıp
+"bu bölge şu sebeplerden değerlenebilir" tarzında insan diline çevirmektir — skorlama
+mantığının kendisini LLM üretmez.
+
+
+7. MİMARİ PRENSİPLER VE KATMANLI TASARIM
+--------------------------------------------------------------------------------
+Proje, SOLID prensiplerine uygun, modüler ve katmanlı bir mimariyle geliştirilecektir:
+
+* Presentation Layer (React.js): Harita görselleştirme, kullanıcı etkileşimi. Backend'e
+  yalnızca API üzerinden bağımlıdır.
+* API Layer (FastAPI routers): HTTP isteklerini karşılar, giriş doğrulama (validation)
+  yapar, iş mantığını (Application Layer) çağırır. İş mantığı içermez.
+* Application / Service Layer: Kullanım senaryolarını (use case) yürütür
+  (örn. "bölge için büyüme skoru hesapla"). Domain ve Infrastructure katmanlarını
+  orkestre eder.
+* Domain Layer: Çekirdek iş kuralları — skorlama algoritması, proje/bölge varlıkları
+  (entities), mesafe/ağırlık hesap mantığı. Hiçbir dış bağımlılığı (DB, HTTP, LLM SDK)
+  yoktur; saf Python.
+* Infrastructure Layer: PostGIS repository implementasyonları, dış servis adaptörleri.
+
+SOLID uygulaması:
+* Single Responsibility: Her katman/modül tek bir sorumluluğa sahiptir
+  (örn. skorlama mantığı ile veri erişimi ayrı modüllerdedir).
+* Open/Closed: Yeni bir skorlama stratejisi veya yeni bir LLM sağlayıcısı, mevcut kodu
+  değiştirmeden, yeni bir implementasyon eklenerek desteklenir.
+* Liskov Substitution: Aynı arayüzü (interface/protocol) uygulayan farklı
+  implementasyonlar (örn. farklı skorlama stratejileri) birbirinin yerine sorunsuz geçer.
+* Interface Segregation: Küçük, odaklı arayüzler tanımlanır
+  (örn. IProjectRepository, IHeatmapScorer, ILLMInterpreter).
+* Dependency Inversion: Domain/Application katmanları somut implementasyonlara değil,
+  soyutlamalara (interface/protocol) bağımlıdır. Bu sayede LLM entegrasyonu, Domain
+  katmanı hiç değişmeden, ILLMInterpreter arayüzünün yeni bir implementasyonu olarak
+  ileride eklenebilir.
+
+
+8. İLK AŞAMA (MVP) PLANI
+--------------------------------------------------------------------------------
+1. Pilot Bölge: Sakarya (kesinleşti).
+2. Manuel Veri Besleme: Sakarya'ya ait 3-4 büyük projenin koordinatlarını manuel olarak
+   veri tabanına (PostGIS) işleme.
+3. Çekirdek Algoritma: Kural bazlı büyüme skoru hesaplama (Domain Layer).
+4. Harita Entegrasyonu: React + Leaflet.js ile projeleri ve ısı haritasını görselleştirme.
+5. Kullanıcı Testi: Sakarya'daki yerel emlakçılarla MVP'yi test edip geri bildirim toplama.
+6. LLM: MVP'de yok. Mimari LLM'e hazır (ILLMInterpreter arayüzü tanımlı, implementasyon
+   sonraki fazda eklenecek).
+
+
+9. KARŞILAŞILABİLECEK ZORLUKLAR VE ÇÖZÜMLERİ
+--------------------------------------------------------------------------------
+* Zorluk: Devlet verilerinin standart API'ler ile sunulmaması.
+  - Çözüm: MVP'de manuel veri girişi; sonraki fazda ÇED raporları ve Resmi Gazete için
+    scraping botları yazılması.
+* Zorluk: Skorlama algoritmasının ağırlıklarının (proje türü önemi, mesafe eğrisi)
+  keyfi/hatalı belirlenmesi.
+  - Çözüm: İlk ağırlıklar Sakarya'yı iyi tanıyan geliştirici ve yerel emlakçı geri
+    bildirimiyle kalibre edilecek.
+* Zorluk: Arsa fiyat verilerinin manipülasyona açık olması.
+  - Çözüm: MVP'de fiyat verisi kullanılmıyor; ileride TÜİK'in resmi satış hacmi ve
+    endeks verilerine odaklanılacak, ilan fiyatlarına değil.
+* Zorluk: İleride LLM eklenirken mimarinin yeniden yazılması riski.
+  - Çözüm: Domain katmanı LLM'den tamamen izole tutulur; LLM sadece ILLMInterpreter
+    arayüzü üzerinden, opsiyonel bir katman olarak eklenir (Dependency Inversion).
+
+--------------------------------------------------------------------------------
+Hazırlayan: Ahmet Safa Mutaf
+Tarih: 06.07.2026
+Durum: MVP Kapsamı ve Mimari Kesinleşti — İskelet Kurulumuna Hazır
+================================================================================

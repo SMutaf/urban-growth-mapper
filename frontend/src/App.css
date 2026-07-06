@@ -1,0 +1,21 @@
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.error-banner {
+  position: absolute;
+  z-index: 1000;
+  top: 12px;
+  left: 12px;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: sans-serif;
+  font-size: 14px;
+}
