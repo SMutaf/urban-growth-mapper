@@ -22,7 +22,11 @@ from app.domain.interpretation.null_interpreter import NullLLMInterpreter
 from app.domain.scoring.composite_scorer import CompositeHeatmapScorer
 from app.domain.scoring.contributors.hazard_penalty import HazardPenaltyContributor
 from app.domain.scoring.contributors.poi_proximity import PoiProximityContributor
+from app.domain.scoring.contributors.population_growth import PopulationGrowthContributor
 from app.domain.scoring.contributors.project_proximity import ProjectProximityContributor
+from app.infrastructure.persistence.repositories.district_boundary_repository import (
+    SqlAlchemyDistrictBoundaryRepository,
+)
 from app.infrastructure.persistence.repositories.hazard_zone_repository import (
     SqlAlchemyHazardZoneRepository,
 )
@@ -43,11 +47,13 @@ def build_heatmap_service(session: Session) -> HeatmapService:
         region_repo=SqlAlchemyRegionRepository(session),
         poi_repo=SqlAlchemyPointOfInterestRepository(session),
         hazard_repo=SqlAlchemyHazardZoneRepository(session),
+        district_repo=SqlAlchemyDistrictBoundaryRepository(session),
         scorer=CompositeHeatmapScorer(
             [
                 ProjectProximityContributor(),
                 PoiProximityContributor(),
                 HazardPenaltyContributor(),
+                PopulationGrowthContributor(),
             ]
         ),
         interpreter=NullLLMInterpreter(),

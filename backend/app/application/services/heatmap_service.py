@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from app.domain.entities.growth_score import GrowthScore
+from app.domain.entities.region import Region
 from app.domain.interpretation.interfaces import ILLMInterpreter
 from app.domain.repositories.interfaces import (
+    IDistrictDemographicsRepository,
     IHazardZoneRepository,
     IPointOfInterestRepository,
     IProjectRepository,
@@ -40,6 +42,7 @@ class HeatmapService:
         region_repo: IRegionRepository,
         poi_repo: IPointOfInterestRepository,
         hazard_repo: IHazardZoneRepository,
+        district_repo: IDistrictDemographicsRepository,
         scorer: IHeatmapScorer,
         interpreter: ILLMInterpreter,
     ):
@@ -47,6 +50,7 @@ class HeatmapService:
         self._region_repo = region_repo
         self._poi_repo = poi_repo
         self._hazard_repo = hazard_repo
+        self._district_repo = district_repo
         self._scorer = scorer
         self._interpreter = interpreter
 
@@ -56,6 +60,7 @@ class HeatmapService:
             projects=self._project_repo.list_by_city(city),
             points_of_interest=self._poi_repo.list_by_city(city),
             hazard_zones=self._hazard_repo.list_by_city(city),
+            region_growth_rates=self._lookup_growth_rates(city, regions),
         )
         scores = self._scorer.score_regions(regions, context)
         score_by_region = self._index_scores(scores)
@@ -71,6 +76,16 @@ class HeatmapService:
         ]
         interpretation = self._interpreter.interpret(scores, context.projects)
         return HeatmapResult(points=points, interpretation=interpretation)
+
+    def _lookup_growth_rates(self, city: str, regions: List[Region]) -> dict:
+        rates = {}
+        for region in regions:
+            rate = self._district_repo.find_growth_rate_for_point(
+                city, region.center_lat, region.center_lon
+            )
+            if rate is not None:
+                rates[region.id] = rate
+        return rates
 
     @staticmethod
     def _index_scores(scores: List[GrowthScore]) -> dict:

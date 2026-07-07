@@ -47,3 +47,20 @@ class HazardZoneModel(Base):
     risk_level = Column(Float, nullable=False)
     city = Column(String, nullable=False, index=True)
     location = Column(Geometry(geometry_type="POINT", srid=4326), nullable=False)
+
+
+class DistrictBoundaryModel(Base):
+    """One row per neighborhood (mahalle) polygon, carrying its containing
+    district's population growth rate (denormalized at ingestion time -
+    see scripts/ingest_sakarya_population.py). We store per-mahalle polygons
+    rather than a unioned per-ilce polygon because that's the granularity
+    the source boundary file provides.
+    """
+
+    __tablename__ = "district_boundaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    district_name = Column(String, nullable=False, index=True)
+    city = Column(String, nullable=False, index=True)
+    population_growth_rate = Column(Float, nullable=False)
+    boundary = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326), nullable=False)
