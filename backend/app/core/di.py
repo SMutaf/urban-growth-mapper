@@ -12,6 +12,7 @@ never need to change for that.
 
 from sqlalchemy.orm import Session
 
+from app.application.services.district_service import DistrictService
 from app.application.services.hazard_zone_service import HazardZoneService
 from app.application.services.heatmap_service import HeatmapService
 from app.application.services.point_of_interest_service import PointOfInterestService
@@ -74,3 +75,7 @@ def build_point_of_interest_service(session: Session) -> PointOfInterestService:
 
 def build_hazard_zone_service(session: Session) -> HazardZoneService:
     return HazardZoneService(SqlAlchemyHazardZoneRepository(session))
+
+
+def build_district_service(session: Session) -> DistrictService:
+    return DistrictService(SqlAlchemyDistrictBoundaryRepository(session))

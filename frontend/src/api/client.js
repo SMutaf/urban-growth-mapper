@@ -19,3 +19,13 @@ export function fetchHeatmap(city) {
 export function fetchPointsOfInterest(city) {
   return request(`/points-of-interest?city=${encodeURIComponent(city)}`)
 }
+
+export function fetchDistricts(city) {
+  return request(`/districts?city=${encodeURIComponent(city)}`)
+}
+
+export function fetchDistrictBoundary(city, districtName) {
+  return request(
+    `/districts/${encodeURIComponent(districtName)}/boundary?city=${encodeURIComponent(city)}`,
+  )
+}

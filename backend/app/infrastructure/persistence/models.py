@@ -63,4 +63,6 @@ class DistrictBoundaryModel(Base):
     district_name = Column(String, nullable=False, index=True)
     city = Column(String, nullable=False, index=True)
     population_growth_rate = Column(Float, nullable=False)
+    population = Column(Integer, nullable=False)
+    population_year = Column(Integer, nullable=False)
     boundary = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326), nullable=False)

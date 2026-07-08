@@ -82,8 +82,17 @@ def parse_mahalle_boundaries(raw_bytes: bytes) -> Iterator[MahalleBoundary]:
             if not district_name or not geometry_dict:
                 continue
 
-            geometry = shape(geometry_dict)
-            geometry_wgs84 = shapely_transform(reproject, geometry)
+            try:
+                geometry = shape(geometry_dict)
+                geometry_wgs84 = shapely_transform(reproject, geometry)
+            except (ValueError, TypeError):
+                # The truncation point varies between downloads and can land
+                # mid-coordinate-ring, producing a feature that's technically
+                # complete JSON (so ijson doesn't raise) but has a malformed
+                # geometry. Skip just this one feature rather than losing
+                # everything parsed so far.
+                continue
+
             repaired_district_name = _repair_double_encoded_utf8(district_name)
 
             yield MahalleBoundary(

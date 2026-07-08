@@ -41,6 +41,7 @@ from app.infrastructure.ingestion.population_xlsx_parser import (  # noqa: E402
 )
 from app.infrastructure.persistence.database import SessionLocal  # noqa: E402
 from app.infrastructure.persistence.repositories.district_boundary_repository import (  # noqa: E402
+    MahalleRecord,
     SqlAlchemyDistrictBoundaryRepository,
 )
 
@@ -53,11 +54,13 @@ DISTRICT_TITLE_PATTERN = re.compile(
 MIN_PREFIX_MATCH_LENGTH = 4
 
 
-def fetch_district_growth_rates(client: CkanClient) -> dict:
-    """Returns {normalized_district_name: growth_rate} discovered from every
-    per-district total-population dataset on the portal.
+def fetch_district_stats(client: CkanClient) -> dict:
+    """Returns {normalized_district_name: (growth_rate, population, year)}
+    discovered from every per-district total-population dataset on the
+    portal - growth_rate is the CAGR over the full timeseries, population/
+    year are the most recent data point.
     """
-    growth_rates = {}
+    stats = {}
     for package in client.search_packages("TOPLAM NUFUS", rows=50):
         match = DISTRICT_TITLE_PATTERN.search(package.get("title", ""))
         if not match:
@@ -79,23 +82,24 @@ def fetch_district_growth_rates(client: CkanClient) -> dict:
             print(f"  skip '{district_name}': {exc}")
             continue
 
-        growth_rates[normalize_district_name(district_name)] = growth_rate
-        print(f"  {district_name}: {growth_rate:+.4%} ({timeseries[0][0]}-{timeseries[-1][0]})")
+        latest_year, latest_population = timeseries[-1]
+        stats[normalize_district_name(district_name)] = (growth_rate, latest_population, latest_year)
+        print(f"  {district_name}: {latest_population:,} ({latest_year}), {growth_rate:+.4%}/yil")
 
-    return growth_rates
+    return stats
 
 
-def find_growth_rate(district_key: str, growth_rates: dict):
-    if district_key in growth_rates:
-        return growth_rates[district_key]
+def find_district_stats(district_key: str, stats: dict):
+    if district_key in stats:
+        return stats[district_key]
     # Fallback: some district names in the boundary file are corrupted by
     # mixed source encoding (see mahalle_geojson_parser.py) and only match
     # the clean population-dataset name as a prefix/suffix of each other.
-    for key, rate in growth_rates.items():
+    for key, value in stats.items():
         if len(district_key) < MIN_PREFIX_MATCH_LENGTH or len(key) < MIN_PREFIX_MATCH_LENGTH:
             continue
         if key.startswith(district_key) or district_key.startswith(key):
-            return rate
+            return value
     return None
 
 
@@ -121,8 +125,8 @@ def ingest() -> None:
     client = CkanClient(CKAN_BASE_URL)
 
     print("Discovering per-district population datasets...")
-    growth_rates = fetch_district_growth_rates(client)
-    print(f"Found growth rates for {len(growth_rates)} districts.\n")
+    stats = fetch_district_stats(client)
+    print(f"Found population stats for {len(stats)} districts.\n")
 
     print("Downloading neighbourhood boundary GeoJSON...")
     raw_geojson = fetch_mahalle_boundaries_geojson(client)
@@ -130,15 +134,24 @@ def ingest() -> None:
     matched_records = []
     unmatched_districts = set()
     for mahalle in parse_mahalle_boundaries(raw_geojson):
-        rate = find_growth_rate(mahalle.district_name_normalized, growth_rates)
-        if rate is None:
+        district_stats = find_district_stats(mahalle.district_name_normalized, stats)
+        if district_stats is None:
             unmatched_districts.add(mahalle.district_name)
             continue
-        matched_records.append((mahalle.district_name, rate, mahalle.geometry))
+        growth_rate, population, population_year = district_stats
+        matched_records.append(
+            MahalleRecord(
+                district_name=mahalle.district_name,
+                growth_rate=growth_rate,
+                population=population,
+                population_year=population_year,
+                geometry=mahalle.geometry,
+            )
+        )
 
-    print(f"Matched {len(matched_records)} mahalle polygons to a district growth rate.")
+    print(f"Matched {len(matched_records)} mahalle polygons to district population stats.")
     if unmatched_districts:
-        print(f"Could not match growth rate for: {sorted(unmatched_districts)}")
+        print(f"Could not match population stats for: {sorted(unmatched_districts)}")
 
     session = SessionLocal()
     try:
