@@ -8,8 +8,8 @@ def test_region_closer_to_project_scores_higher():
     contributor = ProjectProximityContributor()
     project = Project(
         id=1,
-        name="Test YHT",
-        project_type=ProjectType.RAILWAY,
+        name="Test Liman",
+        project_type=ProjectType.PORT,
         status=ProjectStatus.COMPLETED,
         city="sakarya",
         latitude=40.77,
@@ -34,11 +34,11 @@ def test_planned_project_contributes_less_than_completed():
     contributor = ProjectProximityContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
     planned = Project(
-        id=1, name="planned", project_type=ProjectType.HIGHWAY, status=ProjectStatus.PLANNED,
+        id=1, name="planned", project_type=ProjectType.PORT, status=ProjectStatus.PLANNED,
         city="sakarya", latitude=40.001, longitude=30.001,
     )
     completed = Project(
-        id=2, name="completed", project_type=ProjectType.HIGHWAY, status=ProjectStatus.COMPLETED,
+        id=2, name="completed", project_type=ProjectType.PORT, status=ProjectStatus.COMPLETED,
         city="sakarya", latitude=40.001, longitude=30.001,
     )
 
@@ -46,3 +46,26 @@ def test_planned_project_contributes_less_than_completed():
     completed_contribution = contributor.contribute(region, ScoringContext(projects=[completed]))
 
     assert completed_contribution > planned_contribution
+
+
+def test_railway_and_highway_are_excluded_now_handled_by_specialized_contributors():
+    contributor = ProjectProximityContributor()
+    region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
+    railway = Project(
+        id=1, name="rail", project_type=ProjectType.RAILWAY, status=ProjectStatus.COMPLETED,
+        city="sakarya", latitude=40.001, longitude=30.001,
+    )
+    highway = Project(
+        id=2, name="road", project_type=ProjectType.HIGHWAY, status=ProjectStatus.COMPLETED,
+        city="sakarya", latitude=40.001, longitude=30.001,
+    )
+    industrial = Project(
+        id=3, name="osb", project_type=ProjectType.INDUSTRIAL_ZONE, status=ProjectStatus.COMPLETED,
+        city="sakarya", latitude=40.001, longitude=30.001,
+    )
+
+    contribution = contributor.contribute(
+        region, ScoringContext(projects=[railway, highway, industrial])
+    )
+
+    assert contribution == 0.0

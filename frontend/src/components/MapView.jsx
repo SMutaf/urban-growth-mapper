@@ -13,6 +13,9 @@ const PROJECT_TYPE_LABELS = {
 
 const POI_CATEGORY_LABELS = {
   metro_station: 'Metro İstasyonu',
+  train_station: 'Tren İstasyonu',
+  highway_junction: 'Otoyol Kavşağı',
+  university: 'Üniversite',
   bus_stop: 'Otobüs Durağı/Terminali',
   hospital: 'Hastane',
   shopping_center: 'Çarşı / AVM',

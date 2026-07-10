@@ -7,6 +7,9 @@ from app.domain.entities.project import ProjectStatus
 
 class POICategory(str, Enum):
     METRO_STATION = "metro_station"
+    TRAIN_STATION = "train_station"
+    HIGHWAY_JUNCTION = "highway_junction"
+    UNIVERSITY = "university"
     BUS_STOP = "bus_stop"
     HOSPITAL = "hospital"
     SHOPPING_CENTER = "shopping_center"

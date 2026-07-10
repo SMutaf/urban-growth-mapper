@@ -18,7 +18,7 @@ def _scorer():
 def test_region_near_project_and_poi_scores_higher_than_empty_region():
     scorer = _scorer()
     project = Project(
-        id=1, name="YHT", project_type=ProjectType.RAILWAY, status=ProjectStatus.COMPLETED,
+        id=1, name="Liman", project_type=ProjectType.PORT, status=ProjectStatus.COMPLETED,
         city="sakarya", latitude=40.77, longitude=30.40,
     )
     hospital = PointOfInterest(
@@ -36,7 +36,7 @@ def test_region_near_project_and_poi_scores_higher_than_empty_region():
 
 def test_hazard_zone_lowers_score_relative_to_no_hazard():
     project = Project(
-        id=1, name="YHT", project_type=ProjectType.RAILWAY, status=ProjectStatus.COMPLETED,
+        id=1, name="Liman", project_type=ProjectType.PORT, status=ProjectStatus.COMPLETED,
         city="sakarya", latitude=40.0, longitude=30.0,
     )
     region = Region(id=1, name="r", city="sakarya", center_lat=40.001, center_lon=30.001)

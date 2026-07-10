@@ -6,6 +6,13 @@ from app.domain.scoring.status_weights import STATUS_MULTIPLIERS
 
 # Relative importance of each amenity category. A metro/bus stop shapes daily
 # commute patterns the most; a school affects a narrower audience.
+#
+# TRAIN_STATION, HIGHWAY_JUNCTION, and UNIVERSITY are deliberately excluded -
+# the hedonic-pricing literature calls for banded, non-monotonic distance
+# curves for those (see RailStationAccessContributor,
+# HighwayJunctionAccessContributor, UniversityProximityContributor), which
+# this contributor's plain inverse-distance-decay can't express. Including
+# them here too would double-count the same underlying PointOfInterest rows.
 POI_CATEGORY_WEIGHTS = {
     POICategory.METRO_STATION: 1.0,
     POICategory.CITY_CENTER: 0.8,
@@ -27,10 +34,12 @@ class PoiProximityContributor:
     def contribute(self, region: Region, context: ScoringContext) -> float:
         total = 0.0
         for poi in context.points_of_interest:
+            if poi.category not in POI_CATEGORY_WEIGHTS:
+                continue
             distance_km = haversine_distance_km(
                 region.center_lat, region.center_lon, poi.latitude, poi.longitude
             )
-            category_weight = POI_CATEGORY_WEIGHTS.get(poi.category, 0.4)
+            category_weight = POI_CATEGORY_WEIGHTS[poi.category]
             status_weight = STATUS_MULTIPLIERS.get(poi.status, 0.6)
             total += (category_weight * status_weight * poi.importance) / (1 + distance_km)
         return total

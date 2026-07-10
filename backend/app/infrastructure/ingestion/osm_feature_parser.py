@@ -126,6 +126,81 @@ def extract_port_projects(elements: List[Dict[str, Any]], city: str) -> List[Pro
     return projects
 
 
+def extract_train_stations(elements: List[Dict[str, Any]], city: str) -> List[PointOfInterest]:
+    pois = []
+    for element in elements:
+        tags = element.get("tags", {})
+        if tags.get("railway") != "station":
+            continue
+        lat = element.get("lat") or (element.get("center") or {}).get("lat")
+        lon = element.get("lon") or (element.get("center") or {}).get("lon")
+        if lat is None or lon is None:
+            continue
+        pois.append(
+            PointOfInterest(
+                id=None,
+                name=tags.get("name") or "Tren Istasyonu",
+                category=POICategory.TRAIN_STATION,
+                status=ProjectStatus.COMPLETED,
+                city=city,
+                latitude=lat,
+                longitude=lon,
+                importance=1.0,
+            )
+        )
+    return pois
+
+
+def extract_highway_junctions(elements: List[Dict[str, Any]], city: str) -> List[PointOfInterest]:
+    pois = []
+    for element in elements:
+        tags = element.get("tags", {})
+        if tags.get("highway") != "motorway_junction":
+            continue
+        lat = element.get("lat") or (element.get("center") or {}).get("lat")
+        lon = element.get("lon") or (element.get("center") or {}).get("lon")
+        if lat is None or lon is None:
+            continue
+        pois.append(
+            PointOfInterest(
+                id=None,
+                name=tags.get("name") or tags.get("ref") or "Otoyol Kavsagi",
+                category=POICategory.HIGHWAY_JUNCTION,
+                status=ProjectStatus.COMPLETED,
+                city=city,
+                latitude=lat,
+                longitude=lon,
+                importance=1.0,
+            )
+        )
+    return pois
+
+
+def extract_universities(elements: List[Dict[str, Any]], city: str) -> List[PointOfInterest]:
+    pois = []
+    for element in elements:
+        tags = element.get("tags", {})
+        if tags.get("amenity") != "university":
+            continue
+        lat = element.get("lat") or (element.get("center") or {}).get("lat")
+        lon = element.get("lon") or (element.get("center") or {}).get("lon")
+        if lat is None or lon is None:
+            continue
+        pois.append(
+            PointOfInterest(
+                id=None,
+                name=tags.get("name") or "Universite",
+                category=POICategory.UNIVERSITY,
+                status=ProjectStatus.COMPLETED,
+                city=city,
+                latitude=lat,
+                longitude=lon,
+                importance=1.0,
+            )
+        )
+    return pois
+
+
 def extract_transit_pois(elements: List[Dict[str, Any]], city: str) -> List[PointOfInterest]:
     pois = []
     for element in elements:

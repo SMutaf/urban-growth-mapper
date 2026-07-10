@@ -4,28 +4,34 @@ from app.domain.geo_utils import haversine_distance_km
 from app.domain.scoring.scoring_context import ScoringContext
 from app.domain.scoring.status_weights import STATUS_MULTIPLIERS
 
-# Relative importance of each infrastructure project type in the growth score.
+# Railway, highway, and industrial_zone project types are deliberately
+# excluded here - the hedonic-pricing literature calls for non-monotonic,
+# banded distance curves for those (see RailwayNoiseContributor +
+# RailStationAccessContributor, HighwayNoiseContributor +
+# HighwayJunctionAccessContributor, IndustrialZoneAccessContributor), which
+# a plain inverse-distance-decay formula can't express. Including them here
+# too would double-count the same underlying Project rows.
 PROJECT_TYPE_WEIGHTS = {
-    ProjectType.RAILWAY: 1.0,
     ProjectType.PORT: 0.9,
-    ProjectType.HIGHWAY: 0.8,
-    ProjectType.INDUSTRIAL_ZONE: 0.7,
     ProjectType.OTHER: 0.5,
 }
 
 
 class ProjectProximityContributor:
-    """Positive factor: sum of every major infrastructure project's
-    (type weight x status weight x importance), decayed by inverse distance.
+    """Positive factor for project types with no specialized banded
+    contributor (currently: port, other) - sum of (type weight x status
+    weight x importance), decayed by inverse distance.
     """
 
     def contribute(self, region: Region, context: ScoringContext) -> float:
         total = 0.0
         for project in context.projects:
+            if project.project_type not in PROJECT_TYPE_WEIGHTS:
+                continue
             distance_km = haversine_distance_km(
                 region.center_lat, region.center_lon, project.latitude, project.longitude
             )
-            type_weight = PROJECT_TYPE_WEIGHTS.get(project.project_type, 0.5)
+            type_weight = PROJECT_TYPE_WEIGHTS[project.project_type]
             status_weight = STATUS_MULTIPLIERS.get(project.status, 0.6)
             total += (type_weight * status_weight * project.importance) / (1 + distance_km)
         return total
