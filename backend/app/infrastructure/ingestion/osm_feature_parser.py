@@ -97,6 +97,35 @@ def extract_industrial_zone_projects(elements: List[Dict[str, Any]], city: str) 
     return projects
 
 
+def extract_port_projects(elements: List[Dict[str, Any]], city: str) -> List[Project]:
+    """Matches landuse=harbour features (the actual harbour/port area) -
+    deliberately narrower than a generic "Liman" name search, which also
+    catches unrelated results (a restaurant named "Liman Lokantasi", small
+    fishing/lake piers, a neighbourhood called "Limandere").
+    """
+    projects = []
+    for element in elements:
+        tags = element.get("tags", {})
+        name = tags.get("name")
+        center = element.get("center") or {"lat": element.get("lat"), "lon": element.get("lon")}
+        if tags.get("landuse") != "harbour" or not name or center.get("lat") is None:
+            continue
+        projects.append(
+            Project(
+                id=None,
+                name=name,
+                project_type=ProjectType.PORT,
+                status=ProjectStatus.UNDER_CONSTRUCTION,
+                city=city,
+                latitude=center["lat"],
+                longitude=center["lon"],
+                importance=0.9,
+                description="OpenStreetMap verisinden otomatik alindi.",
+            )
+        )
+    return projects
+
+
 def extract_transit_pois(elements: List[Dict[str, Any]], city: str) -> List[PointOfInterest]:
     pois = []
     for element in elements:
