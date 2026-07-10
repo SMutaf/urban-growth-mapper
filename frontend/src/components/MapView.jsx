@@ -61,6 +61,7 @@ export default function MapView({
   const heatLayerRef = useRef(null)
   const markersLayerRef = useRef(null)
   const busStopLayerRef = useRef(null)
+  const schoolLayerRef = useRef(null)
   const otherPoiLayerRef = useRef(null)
   const boundaryLayerRef = useRef(null)
 
@@ -72,6 +73,7 @@ export default function MapView({
     }).addTo(map)
     markersLayerRef.current = L.layerGroup()
     busStopLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
+    schoolLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
     otherPoiLayerRef.current = L.layerGroup()
     boundaryLayerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
@@ -126,24 +128,28 @@ export default function MapView({
     }
   }, [layers.projects])
 
-  // POIs: split into bus stops vs other, populate each cluster/layer group
+  // POIs: split into bus stops / schools / other, populate each group
   useEffect(() => {
     const busStopGroup = busStopLayerRef.current
+    const schoolGroup = schoolLayerRef.current
     const otherGroup = otherPoiLayerRef.current
-    if (!busStopGroup || !otherGroup) return
+    if (!busStopGroup || !schoolGroup || !otherGroup) return
     busStopGroup.clearLayers()
+    schoolGroup.clearLayers()
     otherGroup.clearLayers()
     pointsOfInterest.forEach((poi) => {
       const marker = poiCircleMarker(poi)
       if (poi.category === 'bus_stop') {
         busStopGroup.addLayer(marker)
+      } else if (poi.category === 'school') {
+        schoolGroup.addLayer(marker)
       } else {
         marker.addTo(otherGroup)
       }
     })
   }, [pointsOfInterest])
 
-  // POIs: visibility (bus stops and other POIs toggle independently)
+  // POIs: visibility (bus stops, schools, and other POIs toggle independently)
   useEffect(() => {
     const map = mapRef.current
     const busStopGroup = busStopLayerRef.current
@@ -154,6 +160,17 @@ export default function MapView({
       map.removeLayer(busStopGroup)
     }
   }, [layers.busStops])
+
+  useEffect(() => {
+    const map = mapRef.current
+    const schoolGroup = schoolLayerRef.current
+    if (!map || !schoolGroup) return
+    if (layers.schools) {
+      map.addLayer(schoolGroup)
+    } else {
+      map.removeLayer(schoolGroup)
+    }
+  }, [layers.schools])
 
   useEffect(() => {
     const map = mapRef.current

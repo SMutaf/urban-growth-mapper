@@ -16,9 +16,10 @@ const SAKARYA_CENTER = [40.7569, 30.3781]
 const INITIAL_LAYERS = {
   heatmap: true,
   projects: true,
-  // Bus stops (2600+ points) are only fetched once this is switched on -
+  // Bus stops (2600+) and schools (683) are only fetched once switched on -
   // loading them eagerly on every page visit was the reported perf issue.
   busStops: false,
+  schools: false,
   otherPois: true,
 }
 
@@ -44,11 +45,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const needsPois = layers.busStops || layers.otherPois
+    const needsPois = layers.busStops || layers.schools || layers.otherPois
     if (!needsPois || poisRequested) return
     setPoisRequested(true)
     fetchPointsOfInterest(CITY).then(setPointsOfInterest).catch((err) => setError(err.message))
-  }, [layers.busStops, layers.otherPois, poisRequested])
+  }, [layers.busStops, layers.schools, layers.otherPois, poisRequested])
 
   const handleToggleLayer = (key) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }))

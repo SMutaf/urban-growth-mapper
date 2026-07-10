@@ -2,6 +2,7 @@ const LAYER_OPTIONS = [
   { key: 'heatmap', label: 'Isı Haritası' },
   { key: 'projects', label: 'Projeler (Yol, Demiryolu, OSB, Liman)' },
   { key: 'busStops', label: 'Otobüs Durakları (2600+ nokta)' },
+  { key: 'schools', label: 'Okullar (683 nokta)' },
   { key: 'otherPois', label: 'Diğer Noktalar (Hastane, Şehir Merkezi)' },
 ]
 
