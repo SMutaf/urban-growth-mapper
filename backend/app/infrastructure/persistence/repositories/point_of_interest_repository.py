@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import Point
@@ -15,11 +15,13 @@ class SqlAlchemyPointOfInterestRepository:
     def __init__(self, session: Session):
         self._session = session
 
-    def list_by_city(self, city: str) -> List[PointOfInterest]:
-        rows = self._session.query(PointOfInterestModel).filter(
-            PointOfInterestModel.city == city
-        ).all()
-        return [self._to_entity(row) for row in rows]
+    def list_by_city(
+        self, city: str, categories: Optional[List[POICategory]] = None
+    ) -> List[PointOfInterest]:
+        query = self._session.query(PointOfInterestModel).filter(PointOfInterestModel.city == city)
+        if categories:
+            query = query.filter(PointOfInterestModel.category.in_([c.value for c in categories]))
+        return [self._to_entity(row) for row in query.all()]
 
     def add(self, poi: PointOfInterest) -> PointOfInterest:
         model = self._to_model(poi)

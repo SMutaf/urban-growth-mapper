@@ -152,7 +152,7 @@ const SUPERSAMPLE = 5
 const MIN_ALPHA = 40
 const MAX_ALPHA = 235
 
-export function buildHeatmapRaster(heatmapPoints) {
+export function buildHeatmapRaster(heatmapPoints, minScore = 0) {
   if (!heatmapPoints || heatmapPoints.length === 0) return null
   const colorStops = computeColorStops(heatmapPoints)
   const built = buildGrid(heatmapPoints)
@@ -178,7 +178,11 @@ export function buildHeatmapRaster(heatmapPoints) {
       const colF = (x / (outW - 1)) * (nCols - 1)
       const score = bilinearSample(grid, nRows, nCols, rowF, colF)
       const idx = (y * outW + x) * 4
-      if (score === null) {
+      // minScore renders as fully transparent rather than excluded from
+      // the interpolation itself - keeps the smooth field's math/color
+      // stops identical regardless of the filter, so panning/zooming or
+      // adjusting the threshold never repaints the underlying gradient.
+      if (score === null || score < minScore) {
         imageData.data[idx + 3] = 0
         continue
       }

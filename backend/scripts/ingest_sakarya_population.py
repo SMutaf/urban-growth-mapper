@@ -153,6 +153,7 @@ def ingest() -> None:
         matched_records.append(
             MahalleRecord(
                 district_name=mahalle.district_name,
+                mahalle_name=mahalle.name,
                 growth_rate=growth_rate,
                 growth_momentum=momentum,
                 population=population,

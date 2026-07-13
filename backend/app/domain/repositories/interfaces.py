@@ -4,7 +4,7 @@ from typing import List, Optional, Protocol, Tuple
 from app.domain.entities.district import District
 from app.domain.entities.hazard_zone import HazardZone
 from app.domain.entities.land_cover import LandCoverCell
-from app.domain.entities.point_of_interest import PointOfInterest
+from app.domain.entities.point_of_interest import POICategory, PointOfInterest
 from app.domain.entities.project import Project
 from app.domain.entities.region import Region
 
@@ -32,7 +32,15 @@ class IRegionRepository(Protocol):
 
 
 class IPointOfInterestRepository(Protocol):
-    def list_by_city(self, city: str) -> List[PointOfInterest]:
+    def list_by_city(
+        self, city: str, categories: Optional[List[POICategory]] = None
+    ) -> List[PointOfInterest]:
+        """`categories=None` returns every category (what scoring needs -
+        see HeatmapService._build_context, which never passes this).
+        Frontend search/quick-filter requests pass a short category list
+        instead, to fetch e.g. schools+hospitals without pulling in the
+        2600+ bus stops bundled in the unfiltered response.
+        """
         ...
 
     def add(self, poi: PointOfInterest) -> PointOfInterest:

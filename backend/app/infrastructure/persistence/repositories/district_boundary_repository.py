@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -11,6 +12,12 @@ from app.domain.entities.district import District
 from app.domain.repositories.interfaces import DistrictGrowthStats
 from app.infrastructure.persistence.models import DistrictBoundaryModel
 
+# A mahalle with fewer than this many ~1km heatmap grid cells inside it
+# gets flagged low_sample=True (see group_scores_by_mahalle) - a single
+# cell shouldn't be presented as representing a whole neighbourhood's score
+# with the same confidence as one averaged over a dozen cells.
+LOW_SAMPLE_CELL_THRESHOLD = 3
+
 
 @dataclass
 class MahalleRecord:
@@ -19,11 +26,22 @@ class MahalleRecord:
     """
 
     district_name: str
+    mahalle_name: str
     growth_rate: float
     growth_momentum: float
     population: int
     population_year: int
     geometry: BaseGeometry
+
+
+@dataclass
+class MahalleScoreEntry:
+    mahalle_name: str
+    # None (not 0.0) when zero heatmap cells fell inside this mahalle -
+    # "no data" must never be presented as a real, if low, score.
+    avg_score: Optional[float]
+    cell_count: int
+    low_sample: bool
 
 
 class SqlAlchemyDistrictBoundaryRepository:
@@ -41,6 +59,7 @@ class SqlAlchemyDistrictBoundaryRepository:
         models = [
             DistrictBoundaryModel(
                 district_name=record.district_name,
+                mahalle_name=record.mahalle_name,
                 city=city,
                 population_growth_rate=record.growth_rate,
                 population_growth_momentum=record.growth_momentum,
@@ -128,6 +147,86 @@ class SqlAlchemyDistrictBoundaryRepository:
                     growth_rate=growth_rate,
                 )
         return sorted(by_name.values(), key=lambda d: d.name)
+
+    def find_mahalle_names_for_points(self, city: str, points: List[Tuple[float, float]]) -> List[Optional[str]]:
+        """Reverse-geocode: which mahalle polygon (if any) contains each
+        (lat, lon) - same STRtree point-in-polygon approach as
+        find_growth_rates_for_points, returning the mahalle's own name
+        (DistrictBoundaryModel.mahalle_name) instead of growth stats. None
+        means either the point falls outside every polygon, or the mahalle
+        it falls in hasn't had mahalle_name backfilled yet (a re-ingest via
+        scripts/ingest_sakarya_population.py is required after this column
+        was added - see scripts/init_db.py's migration note).
+        """
+        rows = (
+            self._session.query(DistrictBoundaryModel.boundary, DistrictBoundaryModel.mahalle_name)
+            .filter(DistrictBoundaryModel.city == city)
+            .all()
+        )
+        if not rows:
+            return [None] * len(points)
+
+        polygons = [to_shape(boundary) for boundary, _ in rows]
+        names = [name for _, name in rows]
+        tree = STRtree(polygons)
+
+        results: List[Optional[str]] = []
+        for lat, lon in points:
+            point = Point(lon, lat)
+            match = None
+            for idx in tree.query(point):
+                if polygons[idx].contains(point):
+                    match = names[idx]
+                    break
+            results.append(match)
+        return results
+
+    def group_scores_by_mahalle(
+        self, city: str, district_name: str, scored_points: List[Tuple[float, float, float]]
+    ) -> List[MahalleScoreEntry]:
+        """Averages heatmap grid scores per mahalle polygon within one
+        district, via the same point-in-polygon technique as
+        find_growth_rates_for_points. `scored_points` is (lat, lon, score)
+        for the WHOLE city's heatmap grid, not pre-filtered to this
+        district - a mahalle's cells can sit right at its edge.
+
+        Every mahalle in the district is included even with zero matched
+        cells (avg_score=None then, not a fabricated 0.0) - see
+        MahalleScoreEntry and LOW_SAMPLE_CELL_THRESHOLD.
+        """
+        rows = (
+            self._session.query(DistrictBoundaryModel.mahalle_name, DistrictBoundaryModel.boundary)
+            .filter(DistrictBoundaryModel.city == city, DistrictBoundaryModel.district_name == district_name)
+            .all()
+        )
+        if not rows:
+            return []
+
+        names = [name for name, _ in rows]
+        polygons = [to_shape(boundary) for _, boundary in rows]
+        tree = STRtree(polygons)
+
+        scores_by_index: Dict[int, List[float]] = defaultdict(list)
+        for lat, lon, score in scored_points:
+            point = Point(lon, lat)
+            for idx in tree.query(point):
+                if polygons[idx].contains(point):
+                    scores_by_index[idx].append(score)
+                    break
+
+        entries = []
+        for idx, name in enumerate(names):
+            scores = scores_by_index.get(idx, [])
+            entries.append(
+                MahalleScoreEntry(
+                    mahalle_name=name or "(isimsiz mahalle)",
+                    avg_score=(sum(scores) / len(scores)) if scores else None,
+                    cell_count=len(scores),
+                    low_sample=len(scores) < LOW_SAMPLE_CELL_THRESHOLD,
+                )
+            )
+        entries.sort(key=lambda e: (e.avg_score is None, -(e.avg_score or 0.0)))
+        return entries
 
     def get_district_boundary_geojson(self, city: str, district_name: str) -> List[Dict[str, Any]]:
         rows = (

@@ -5,6 +5,7 @@ itself (see IAdvisoryLLMClient's docstring for why that boundary matters).
 """
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -16,9 +17,26 @@ from app.domain.geo_utils import haversine_distance_km
 from app.domain.interpretation.advisory_interfaces import IAdvisoryLLMClient
 from app.domain.scoring.contributors.fringe import FringeContributor
 from app.domain.entities.region import Region
+from app.domain.scoring.growth_direction_analysis import bearing_degrees
 from app.domain.scoring.scoring_context import ScoringContext
+from app.infrastructure.persistence.repositories.district_boundary_repository import (
+    SqlAlchemyDistrictBoundaryRepository,
+)
 
 NEARBY_RADIUS_KM = 1.0
+# A category with more entries than this within 1km (typically bus stops -
+# a dense area can have a dozen) collapses into one summary (nearest
+# distance + count) instead of listing every one by name - see
+# _nearby_features.
+NEARBY_AGGREGATE_THRESHOLD = 3
+
+# Compass labels for growth_direction_analysis.compute_sector_growth's
+# 8-sector output - index 0 is the sector centered on due north, clockwise,
+# matching that function's own convention exactly.
+COMPASS_SECTOR_LABELS_TR = [
+    "kuzey", "kuzeydogu", "dogu", "guneydogu",
+    "guney", "guneybati", "bati", "kuzeybati",
+]
 
 # Turkish labels for the JSON context sent to the LLM - translated here,
 # backend-side, rather than leaving the LLM to guess/translate category
@@ -56,8 +74,10 @@ _INTENT_KEYWORDS: Dict[LandUseProfile, List[str]] = {
     LandUseProfile.INDUSTRIAL: ["sanayi", "depo", "lojistik", "fabrika", "atölye", "üretim", "imalat", "antrepo"],
 }
 
-_SYSTEM_PROMPT_TEMPLATE = """Sen bir kentsel büyüme danışmanısın. Kullanıcının seçtiği konum için, SANA VERİLEN sayısal
-verilere dayanarak niyetine uygunluğu yorumlarsın.
+_SYSTEM_PROMPT_TEMPLATE = """Sen kullanıcıya kendi şehrini tanımasında yardımcı olan, sıcak ve samimi bir kentsel
+büyüme danışmanısın. Kullanıcının seçtiği konum için, SANA VERİLEN sayısal verilere dayanarak
+niyetine uygunluğu yorumlarsın. Konuşma dilin sıcak ve yardımsever olsun ama abartılı pazarlama
+diline KAÇMA - aşağıdaki kurallar tonundan bağımsız, her zaman geçerlidir.
 KURALLAR:
 1. YALNIZCA sana verilen alanları kullan. Bir alan null/eksikse 'bu konuma yakın [X] bilgisi
    görünmüyor' de. ASLA mesafe, skor veya özellik UYDURMA.
@@ -89,14 +109,22 @@ def _nearby_features(context: ScoringContext, lat: float, lon: float) -> List[Di
     not filtered down to whatever the user's stated intent implies, so
     the same context can answer any follow-up question (see the module
     docstring: this is a chatbot, not a single fixed verdict).
+
+    A category with more than NEARBY_AGGREGATE_THRESHOLD hits collapses
+    into one summary entry ({"en_yakin_m": ..., "sayac": ...}) instead of
+    listing every one by name+distance - without this, a dense area's
+    dozen-odd bus stops turned into a repetitive "524m, 543m, 576m, 620m,
+    968m..." wall of numbers in the LLM's reply. Categories at or under the
+    threshold stay itemized by name ({"isim": ..., "mesafe_m": ...}) -
+    knowing there are 2 schools nearby, and which, is still useful.
     """
-    features = []
+    raw_features: List[Dict] = []
     for poi in context.points_of_interest:
         if poi.category not in POI_LABELS_TR:
             continue
         distance_km = haversine_distance_km(lat, lon, poi.latitude, poi.longitude)
         if distance_km <= NEARBY_RADIUS_KM:
-            features.append({
+            raw_features.append({
                 "tur": POI_LABELS_TR[poi.category], "isim": poi.name,
                 "mesafe_m": round(distance_km * 1000),
             })
@@ -105,10 +133,24 @@ def _nearby_features(context: ScoringContext, lat: float, lon: float) -> List[Di
             continue
         distance_km = haversine_distance_km(lat, lon, project.latitude, project.longitude)
         if distance_km <= NEARBY_RADIUS_KM:
-            features.append({
+            raw_features.append({
                 "tur": PROJECT_LABELS_TR[project.project_type], "isim": project.name,
                 "mesafe_m": round(distance_km * 1000),
             })
+
+    by_type: Dict[str, List[Dict]] = defaultdict(list)
+    for feature in raw_features:
+        by_type[feature["tur"]].append(feature)
+
+    features: List[Dict] = []
+    for tur, entries in by_type.items():
+        if len(entries) > NEARBY_AGGREGATE_THRESHOLD:
+            features.append({
+                "tur": tur, "en_yakin_m": min(e["mesafe_m"] for e in entries), "sayac": len(entries),
+            })
+        else:
+            features.extend(entries)
+
     has_open_land_nearby = any(
         cell.is_open_land and haversine_distance_km(lat, lon, cell.latitude, cell.longitude) <= NEARBY_RADIUS_KM
         for cell in context.land_cover_cells
@@ -116,7 +158,7 @@ def _nearby_features(context: ScoringContext, lat: float, lon: float) -> List[Di
     if has_open_land_nearby:
         features.append({"tur": "açık/tarım arazisi", "isim": None, "mesafe_m": None})
 
-    features.sort(key=lambda f: f["mesafe_m"] if f["mesafe_m"] is not None else 0)
+    features.sort(key=lambda f: f.get("mesafe_m") if f.get("mesafe_m") is not None else f.get("en_yakin_m", 0))
     return features
 
 
@@ -162,18 +204,50 @@ def _fringe_label(context: ScoringContext, lat: float, lon: float) -> Optional[s
     return "orta"
 
 
+def _growth_direction_info(context: ScoringContext, lat: float, lon: float) -> Optional[dict]:
+    """City-wide growth-rate-by-compass-direction (relative to the city's
+    overall average - see growth_direction_analysis.compute_sector_growth),
+    plus which of those 8 directions the analyzed point itself falls in
+    from the city center. Lets the LLM honestly answer "which direction is
+    growing fastest" style questions with a real, precomputed figure
+    instead of guessing - None (not a fabricated "kuzey") if there's no
+    ingested city-center POI or growth-direction data to compute this from.
+    """
+    if not context.growth_direction_sectors:
+        return None
+    city_centers = [p for p in context.points_of_interest if p.category == POICategory.CITY_CENTER]
+    if not city_centers:
+        return None
+    center = city_centers[0]
+
+    sectors = context.growth_direction_sectors
+    num_sectors = len(sectors)
+    by_direction = {
+        COMPASS_SECTOR_LABELS_TR[i]: round(sectors[i], 4)
+        for i in range(min(num_sectors, len(COMPASS_SECTOR_LABELS_TR)))
+    }
+    bearing = bearing_degrees(center.latitude, center.longitude, lat, lon)
+    point_sector = round(bearing / (360.0 / num_sectors)) % num_sectors
+    return {
+        "sehir_ortalamasina_gore_yon_bazli_buyume_farki": by_direction,
+        "bu_noktanin_sehir_merkezine_gore_yonu": COMPASS_SECTOR_LABELS_TR[point_sector],
+    }
+
+
 def _build_context_dict(
     message: str, profile: LandUseProfile, ambiguous: bool, score: float,
-    context: ScoringContext, lat: float, lon: float,
+    context: ScoringContext, lat: float, lon: float, mahalle_name: Optional[str],
 ) -> dict:
     return {
         "kullanici_niyeti": message,
         "kullanilan_profil": profile.value,
         "niyet_belirsiz": ambiguous,
+        "mahalle_adi": mahalle_name,
         "buyume_skoru": round(score, 3),
         "yakindaki_ozellikler_1km": _nearby_features(context, lat, lon),
         "en_yakin_metre": _nearest_of_each_type(context, lat, lon),
         "fringe_sinyali": _fringe_label(context, lat, lon),
+        "buyume_yonu_analizi": _growth_direction_info(context, lat, lon),
     }
 
 
@@ -192,9 +266,16 @@ class AdvisoryService:
         self,
         llm_client: IAdvisoryLLMClient,
         heatmap_service_factory: Callable[[LandUseProfile], HeatmapService],
+        # Optional (defaults to None, existing/test call sites unaffected)
+        # so a real mahalle name can be resolved when a district_repo is
+        # wired in (see core/di.py) - typed directly against the concrete
+        # PostGIS repository, same reasoning as DistrictService: this is a
+        # read/visualization lookup, not a domain use case.
+        district_repo: Optional[SqlAlchemyDistrictBoundaryRepository] = None,
     ):
         self._llm_client = llm_client
         self._heatmap_service_factory = heatmap_service_factory
+        self._district_repo = district_repo
 
     def start_conversation(self, city: str, lat: float, lon: float, message: str) -> AdvisoryTurnResult:
         """First message for a newly-selected point - builds the full
@@ -209,7 +290,13 @@ class AdvisoryService:
         heatmap_service = self._heatmap_service_factory(profile)
         score, scoring_context = heatmap_service.score_point_with_context(city, lat, lon)
 
-        context_dict = _build_context_dict(message, profile, ambiguous, score, scoring_context, lat, lon)
+        mahalle_name = None
+        if self._district_repo is not None:
+            mahalle_name = self._district_repo.find_mahalle_names_for_points(city, [(lat, lon)])[0]
+
+        context_dict = _build_context_dict(
+            message, profile, ambiguous, score, scoring_context, lat, lon, mahalle_name
+        )
         conversation = [{"role": "user", "content": message}]
         reply = self._llm_client.ask(build_system_prompt(context_dict), conversation)
         return AdvisoryTurnResult(context=context_dict, reply=reply)

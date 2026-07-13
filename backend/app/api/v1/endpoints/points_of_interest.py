@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from app.api.deps import get_point_of_interest_service
@@ -34,9 +34,15 @@ class PointOfInterestResponse(BaseModel):
 
 @router.get("/points-of-interest", response_model=List[PointOfInterestResponse])
 def list_points_of_interest(
-    city: str, service: PointOfInterestService = Depends(get_point_of_interest_service)
+    city: str,
+    # Repeatable ?category=school&category=hospital - omitted returns every
+    # category (unchanged default behavior). Lets the frontend fetch a
+    # cheap subset (e.g. schools+hospitals for search/quick-filter) without
+    # pulling in the 2600+ bus stops bundled in the unfiltered response.
+    category: Optional[List[POICategory]] = Query(None),
+    service: PointOfInterestService = Depends(get_point_of_interest_service),
 ):
-    return service.list_points_of_interest(city)
+    return service.list_points_of_interest(city, category)
 
 
 @router.post("/points-of-interest", response_model=PointOfInterestResponse)

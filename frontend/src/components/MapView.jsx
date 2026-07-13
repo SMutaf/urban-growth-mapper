@@ -55,11 +55,16 @@ export default function MapView({
   projects,
   pointsOfInterest = [],
   heatmapPoints,
+  minScore = 0,
   center,
   highlightedBoundary,
   roadFeatures = [],
   highlightedRoad,
+  highlightedPoi,
   layers,
+  placementMode = false,
+  onMapClick,
+  analysisPoint,
 }) {
   const mapContainerRef = useRef(null)
   const mapRef = useRef(null)
@@ -67,11 +72,14 @@ export default function MapView({
   const markersLayerRef = useRef(null)
   const busStopLayerRef = useRef(null)
   const schoolLayerRef = useRef(null)
+  const hospitalLayerRef = useRef(null)
   const otherPoiLayerRef = useRef(null)
   const boundaryLayerRef = useRef(null)
   const roadLinesLayerRef = useRef(null)
   const railwayLinesLayerRef = useRef(null)
   const highlightedRoadLayerRef = useRef(null)
+  const highlightedPoiLayerRef = useRef(null)
+  const analysisPinLayerRef = useRef(null)
 
   useEffect(() => {
     if (mapRef.current) return
@@ -81,18 +89,26 @@ export default function MapView({
     // it's tuned, hiding the real cold-to-hot gradient that's actually
     // visible a bit further out. Starting more zoomed out shows that
     // gradient immediately instead of requiring the user to zoom out first.
-    const map = L.map(mapContainerRef.current).setView(center, 10)
+    // Leaflet's default zoom control sits top-left, which now collides
+    // with our own hamburger/search/chip row there - move it out of the
+    // way to bottom-left (Google Maps puts its map-type switcher there;
+    // we don't have one, so it's free).
+    const map = L.map(mapContainerRef.current, { zoomControl: false }).setView(center, 10)
+    L.control.zoom({ position: 'bottomleft' }).addTo(map)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap katkıda bulunanlar',
     }).addTo(map)
     markersLayerRef.current = L.layerGroup()
     busStopLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
     schoolLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
+    hospitalLayerRef.current = L.layerGroup()
     otherPoiLayerRef.current = L.layerGroup()
     boundaryLayerRef.current = L.layerGroup().addTo(map)
     roadLinesLayerRef.current = L.layerGroup()
     railwayLinesLayerRef.current = L.layerGroup()
     highlightedRoadLayerRef.current = L.layerGroup().addTo(map)
+    highlightedPoiLayerRef.current = L.layerGroup().addTo(map)
+    analysisPinLayerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
 
     return () => {
@@ -101,6 +117,41 @@ export default function MapView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // "Analiz Et" placement mode: crosshair cursor + next map click reports
+  // its lat/lon back to the caller (App.jsx), which drops the pin and
+  // opens the advisory chat panel - see analysisPoint below for the pin
+  // itself.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const container = map.getContainer()
+    container.style.cursor = placementMode ? 'crosshair' : ''
+    if (!placementMode) return
+
+    const handleClick = (event) => {
+      onMapClick?.(event.latlng.lat, event.latlng.lng)
+    }
+    map.on('click', handleClick)
+    return () => map.off('click', handleClick)
+  }, [placementMode, onMapClick])
+
+  // Analysis pin: the point currently being discussed in the advisory chat
+  useEffect(() => {
+    const map = mapRef.current
+    const layerGroup = analysisPinLayerRef.current
+    if (!map || !layerGroup) return
+    layerGroup.clearLayers()
+    if (!analysisPoint) return
+
+    L.circleMarker([analysisPoint.lat, analysisPoint.lon], {
+      radius: 9,
+      color: '#7c3aed',
+      fillColor: '#a78bfa',
+      fillOpacity: 0.9,
+      weight: 3,
+    }).addTo(layerGroup)
+  }, [analysisPoint])
 
   // Heatmap: data + visibility
   useEffect(() => {
@@ -111,7 +162,7 @@ export default function MapView({
       heatLayerRef.current = null
     }
     if (layers.heatmap && heatmapPoints && heatmapPoints.length > 0) {
-      const raster = buildHeatmapRaster(heatmapPoints)
+      const raster = buildHeatmapRaster(heatmapPoints, minScore)
       if (raster) {
         heatLayerRef.current = L.imageOverlay(raster.dataUrl, raster.bounds, {
           opacity: 0.8,
@@ -119,7 +170,7 @@ export default function MapView({
         }).addTo(map)
       }
     }
-  }, [heatmapPoints, layers.heatmap])
+  }, [heatmapPoints, layers.heatmap, minScore])
 
   // Projects: populate markers (highways/railways render as lines instead -
   // see the road/railway line effects below - so they're excluded here)
@@ -227,14 +278,39 @@ export default function MapView({
     }
   }, [highlightedRoad])
 
-  // POIs: split into bus stops / schools / other, populate each group
+  // Highlighted POI (from the top search bar - a school/hospital result,
+  // rendered directly here rather than relying on the lazy-loaded POI
+  // marker layers, which may not even be fetched yet at search time)
+  useEffect(() => {
+    const map = mapRef.current
+    const layerGroup = highlightedPoiLayerRef.current
+    if (!map || !layerGroup) return
+    layerGroup.clearLayers()
+    if (!highlightedPoi) return
+
+    L.circleMarker([highlightedPoi.latitude, highlightedPoi.longitude], {
+      radius: 10,
+      color: '#facc15',
+      fillColor: '#fde047',
+      fillOpacity: 0.9,
+      weight: 3,
+    })
+      .bindPopup(`<strong>${highlightedPoi.name}</strong>`)
+      .addTo(layerGroup)
+      .openPopup()
+    map.setView([highlightedPoi.latitude, highlightedPoi.longitude], 15)
+  }, [highlightedPoi])
+
+  // POIs: split into bus stops / schools / hospitals / other, populate each group
   useEffect(() => {
     const busStopGroup = busStopLayerRef.current
     const schoolGroup = schoolLayerRef.current
+    const hospitalGroup = hospitalLayerRef.current
     const otherGroup = otherPoiLayerRef.current
-    if (!busStopGroup || !schoolGroup || !otherGroup) return
+    if (!busStopGroup || !schoolGroup || !hospitalGroup || !otherGroup) return
     busStopGroup.clearLayers()
     schoolGroup.clearLayers()
+    hospitalGroup.clearLayers()
     otherGroup.clearLayers()
     pointsOfInterest.forEach((poi) => {
       const marker = poiCircleMarker(poi)
@@ -242,13 +318,15 @@ export default function MapView({
         busStopGroup.addLayer(marker)
       } else if (poi.category === 'school') {
         schoolGroup.addLayer(marker)
+      } else if (poi.category === 'hospital') {
+        hospitalGroup.addLayer(marker)
       } else {
         marker.addTo(otherGroup)
       }
     })
   }, [pointsOfInterest])
 
-  // POIs: visibility (bus stops, schools, and other POIs toggle independently)
+  // POIs: visibility (bus stops, schools, hospitals, and other POIs toggle independently)
   useEffect(() => {
     const map = mapRef.current
     const busStopGroup = busStopLayerRef.current
@@ -270,6 +348,17 @@ export default function MapView({
       map.removeLayer(schoolGroup)
     }
   }, [layers.schools])
+
+  useEffect(() => {
+    const map = mapRef.current
+    const hospitalGroup = hospitalLayerRef.current
+    if (!map || !hospitalGroup) return
+    if (layers.hospitals) {
+      map.addLayer(hospitalGroup)
+    } else {
+      map.removeLayer(hospitalGroup)
+    }
+  }, [layers.hospitals])
 
   useEffect(() => {
     const map = mapRef.current

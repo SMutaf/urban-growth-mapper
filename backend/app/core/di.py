@@ -17,6 +17,7 @@ from app.application.services.advisory_service import AdvisoryService
 from app.application.services.district_service import DistrictService
 from app.application.services.hazard_zone_service import HazardZoneService
 from app.application.services.heatmap_service import HeatmapService
+from app.application.services.mahalle_detail_service import MahalleDetailService
 from app.application.services.point_of_interest_service import PointOfInterestService
 from app.application.services.project_service import ProjectService
 from app.application.services.region_service import RegionService
@@ -187,6 +188,7 @@ def build_advisory_service(session: Session) -> AdvisoryService:
     return AdvisoryService(
         llm_client=llm_client,
         heatmap_service_factory=lambda profile: build_heatmap_service(session, profile),
+        district_repo=SqlAlchemyDistrictBoundaryRepository(session),
     )
 
 
@@ -208,6 +210,13 @@ def build_hazard_zone_service(session: Session) -> HazardZoneService:
 
 def build_district_service(session: Session) -> DistrictService:
     return DistrictService(SqlAlchemyDistrictBoundaryRepository(session))
+
+
+def build_mahalle_detail_service(session: Session) -> MahalleDetailService:
+    return MahalleDetailService(
+        district_repo=SqlAlchemyDistrictBoundaryRepository(session),
+        heatmap_service_factory=lambda profile: build_heatmap_service(session, profile),
+    )
 
 
 def build_road_geometry_service(session: Session) -> RoadGeometryService:

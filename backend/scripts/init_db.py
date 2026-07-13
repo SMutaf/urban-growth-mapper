@@ -20,6 +20,14 @@ def init_db() -> None:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         conn.commit()
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        # Base.metadata.create_all only creates missing tables, it never
+        # alters existing ones (this project has no Alembic migrations) -
+        # so a column added to an already-existing table (like
+        # DistrictBoundaryModel.mahalle_name) needs an explicit, idempotent
+        # ALTER here to reach a database that already had the table.
+        conn.execute(text("ALTER TABLE district_boundaries ADD COLUMN IF NOT EXISTS mahalle_name VARCHAR"))
+        conn.commit()
 
 
 if __name__ == "__main__":

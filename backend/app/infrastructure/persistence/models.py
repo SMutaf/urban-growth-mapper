@@ -61,6 +61,12 @@ class DistrictBoundaryModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     district_name = Column(String, nullable=False, index=True)
+    # The mahalle's own name (source GeoJSON's "ad" property, see
+    # mahalle_geojson_parser.MahalleBoundary.name) - nullable because rows
+    # ingested before this column existed won't have it until a re-ingest
+    # backfills every row (ingest_sakarya_population.py does a full
+    # clear+reinsert, not an in-place update).
+    mahalle_name = Column(String, nullable=True, index=True)
     city = Column(String, nullable=False, index=True)
     population_growth_rate = Column(Float, nullable=False)
     population_growth_momentum = Column(Float, nullable=False, default=0.0)
