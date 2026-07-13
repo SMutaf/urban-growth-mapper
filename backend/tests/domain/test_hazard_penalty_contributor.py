@@ -14,7 +14,7 @@ def test_hazard_proximity_is_negative():
 
     contribution = contributor.contribute(region, ScoringContext(hazard_zones=[earthquake_zone]))
 
-    assert contribution < 0
+    assert contribution < 1.0
 
 
 def test_closer_region_penalized_more_than_farther_region():
@@ -30,11 +30,11 @@ def test_closer_region_penalized_more_than_farther_region():
     assert contributor.contribute(near_region, context) < contributor.contribute(far_region, context)
 
 
-def test_no_hazard_zones_yields_zero_contribution():
+def test_no_hazard_zones_yields_neutral_multiplier():
     contributor = HazardPenaltyContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(hazard_zones=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(hazard_zones=[])) == 1.0
 
 
 def test_higher_risk_level_penalizes_more():

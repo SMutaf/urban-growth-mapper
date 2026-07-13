@@ -1,6 +1,7 @@
 from app.domain.entities.project import ProjectType
 from app.domain.entities.region import Region
 from app.domain.geo_utils import haversine_distance_km
+from app.domain.scoring.multiplier_utils import positive_sum_to_multiplier
 from app.domain.scoring.scoring_context import ScoringContext
 from app.domain.scoring.status_weights import STATUS_MULTIPLIERS
 
@@ -16,11 +17,17 @@ PROJECT_TYPE_WEIGHTS = {
     ProjectType.OTHER: 0.5,
 }
 
+# See poi_proximity.MAX_TOTAL_SUM for why an unbounded sum-over-all
+# contributor needs a cap before being squashed into a multiplier.
+MAX_TOTAL_SUM = 2.0
+MAX_MULTIPLIER = 1.4
+
 
 class ProjectProximityContributor:
-    """Positive factor for project types with no specialized banded
+    """Positive multiplier for project types with no specialized banded
     contributor (currently: port, other) - sum of (type weight x status
-    weight x importance), decayed by inverse distance.
+    weight x importance) decayed by inverse distance, squashed into a
+    bounded multiplier.
     """
 
     def contribute(self, region: Region, context: ScoringContext) -> float:
@@ -34,4 +41,4 @@ class ProjectProximityContributor:
             type_weight = PROJECT_TYPE_WEIGHTS[project.project_type]
             status_weight = STATUS_MULTIPLIERS.get(project.status, 0.6)
             total += (type_weight * status_weight * project.importance) / (1 + distance_km)
-        return total
+        return positive_sum_to_multiplier(total, MAX_TOTAL_SUM, MAX_MULTIPLIER)

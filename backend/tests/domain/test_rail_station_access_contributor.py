@@ -35,22 +35,22 @@ def test_inverted_u_shape_peak_beats_far_away():
     assert peak_band > far_away
 
 
-def test_right_at_station_is_negative():
+def test_right_at_station_is_penalised():
     contributor = RailStationAccessContributor()
     context = ScoringContext(points_of_interest=[STATION])
 
-    assert contributor.contribute(_region_at_km_offset(0.0), context) < 0
+    assert contributor.contribute(_region_at_km_offset(0.0), context) < 1.0
 
 
 def test_far_away_has_no_effect():
     contributor = RailStationAccessContributor()
     context = ScoringContext(points_of_interest=[STATION])
 
-    assert contributor.contribute(_region_at_km_offset(5.0), context) == 0.0
+    assert contributor.contribute(_region_at_km_offset(5.0), context) == 1.0
 
 
-def test_no_stations_yields_zero():
+def test_no_stations_yields_neutral_multiplier():
     contributor = RailStationAccessContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(points_of_interest=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(points_of_interest=[])) == 1.0

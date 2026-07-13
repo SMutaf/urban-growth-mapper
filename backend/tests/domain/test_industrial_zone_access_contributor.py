@@ -13,11 +13,11 @@ def _region_at_km_offset(km: float) -> Region:
     return Region(id=1, name="r", city="sakarya", center_lat=40.0 + km / 111.0, center_lon=30.0)
 
 
-def test_right_adjacent_is_negative():
+def test_right_adjacent_is_penalised():
     contributor = IndustrialZoneAccessContributor()
     context = ScoringContext(projects=[ZONE])
 
-    assert contributor.contribute(_region_at_km_offset(0.0), context) < 0
+    assert contributor.contribute(_region_at_km_offset(0.0), context) < 1.0
 
 
 def test_commutershed_peak_beats_right_adjacent():
@@ -40,8 +40,8 @@ def test_commutershed_peak_beats_far_away():
     assert commutershed_peak > far_away
 
 
-def test_no_zones_yields_zero():
+def test_no_zones_yields_neutral_multiplier():
     contributor = IndustrialZoneAccessContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(projects=[])) == 1.0

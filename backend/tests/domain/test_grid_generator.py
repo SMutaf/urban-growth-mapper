@@ -20,3 +20,15 @@ def test_smaller_cell_size_produces_more_regions():
     fine = generator.generate(bbox, cell_size_km=1.0)
 
     assert len(fine) > len(coarse)
+
+
+def test_boundary_excludes_cells_outside_the_polygon():
+    bbox = BoundingBox(min_lat=40.0, max_lat=40.2, min_lon=30.0, max_lon=30.2)
+    # A triangle covering only the bottom-left half of the bbox.
+    boundary = [(30.0, 40.0), (30.0, 40.2), (30.2, 40.0)]
+    generator = GridGenerator()
+
+    unclipped = generator.generate(bbox, cell_size_km=2.0)
+    clipped = generator.generate(bbox, cell_size_km=2.0, boundary=boundary)
+
+    assert 0 < len(clipped) < len(unclipped)

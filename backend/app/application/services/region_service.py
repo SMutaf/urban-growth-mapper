@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional, Tuple
 
 from app.domain.entities.region import Region
 from app.domain.grid.grid_generator import BoundingBox, GridGenerator
@@ -13,6 +13,12 @@ class RegionService:
     def list_regions(self, city: str) -> List[Region]:
         return self._region_repo.list_by_city(city)
 
-    def generate_regions(self, city: str, bbox: BoundingBox, cell_size_km: float) -> List[Region]:
-        regions = self._grid_generator.generate(bbox, cell_size_km)
+    def generate_regions(
+        self,
+        city: str,
+        bbox: BoundingBox,
+        cell_size_km: float,
+        boundary: Optional[List[Tuple[float, float]]] = None,
+    ) -> List[Region]:
+        regions = self._grid_generator.generate(bbox, cell_size_km, boundary=boundary)
         return self._region_repo.bulk_create(city, regions)

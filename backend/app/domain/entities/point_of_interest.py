@@ -16,6 +16,12 @@ class POICategory(str, Enum):
     SCHOOL = "school"
     CITY_CENTER = "city_center"
     OTHER = "other"
+    # LULU (locally unwanted land use) categories - hedonic-pricing literature
+    # consistently finds these among the strongest negative price effects,
+    # see NegativeExternalityContributor.
+    PRISON = "prison"
+    LANDFILL = "landfill"
+    CEMETERY = "cemetery"
 
 
 @dataclass

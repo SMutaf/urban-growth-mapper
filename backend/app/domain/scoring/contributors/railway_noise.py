@@ -10,15 +10,16 @@ from app.domain.scoring.scoring_context import ScoringContext
 # RailStationAccessContributor, which scores distance to the station point
 # and is positive at moderate distance - the two effects are independent and
 # can both apply to the same region (e.g. right next to the tracks but also
-# within the station's peak-value band).
-NOISE_BAND = [(0.0, -0.4), (0.2, 0.0)]
+# within the station's peak-value band). -40% right on the tracks, neutral
+# by 200m.
+NOISE_BAND = [(0.0, 0.6), (0.2, 1.0)]
 
 
 class RailwayNoiseContributor:
     def contribute(self, region: Region, context: ScoringContext) -> float:
-        railways = [p for p in context.projects if p.project_type == ProjectType.RAILWAY]
+        railways = context.projects_by_type(ProjectType.RAILWAY)
         if not railways:
-            return 0.0
+            return 1.0
         nearest_km = min(
             haversine_distance_km(region.center_lat, region.center_lon, p.latitude, p.longitude)
             for p in railways

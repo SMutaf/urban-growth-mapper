@@ -17,3 +17,12 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated analysis output
+backend/analysis/resolution_sensitivity/output/
+
+# Stray non-project files (screenshots, invoices, etc.)
+/a/
+
+# Working notes / reports, not project documentation
+/rapor/

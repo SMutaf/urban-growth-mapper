@@ -1,5 +1,5 @@
 from geoalchemy2 import Geometry
-from sqlalchemy import Column, Float, Integer, String
+from sqlalchemy import Boolean, Column, Float, Integer, String
 
 from app.infrastructure.persistence.database import Base
 
@@ -63,6 +63,39 @@ class DistrictBoundaryModel(Base):
     district_name = Column(String, nullable=False, index=True)
     city = Column(String, nullable=False, index=True)
     population_growth_rate = Column(Float, nullable=False)
+    population_growth_momentum = Column(Float, nullable=False, default=0.0)
     population = Column(Integer, nullable=False)
     population_year = Column(Integer, nullable=False)
     boundary = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326), nullable=False)
+
+
+class RoadGeometryModel(Base):
+    """The real line shape of a named highway/railway - map display only,
+    see app/domain/entities/road_geometry.py for why this is a separate
+    table from `projects` rather than adding a geometry column there.
+    Populated by scripts/ingest_sakarya_road_geometries.py.
+    """
+
+    __tablename__ = "road_geometries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    project_type = Column(String, nullable=False)
+    city = Column(String, nullable=False, index=True)
+    geometry = Column(Geometry(geometry_type="MULTILINESTRING", srid=4326), nullable=False)
+
+
+class LandCoverCellModel(Base):
+    """One pre-aggregated building-density reading on a coarse (~1km) grid
+    - see app/domain/entities/land_cover.py for why this isn't one row per
+    OSM building. Populated by scripts/ingest_sakarya_osm.py; used by
+    FringeContributor (app/domain/scoring/contributors/fringe.py).
+    """
+
+    __tablename__ = "land_cover_cells"
+
+    id = Column(Integer, primary_key=True, index=True)
+    city = Column(String, nullable=False, index=True)
+    building_count = Column(Integer, nullable=False)
+    is_open_land = Column(Boolean, nullable=False, default=False)
+    location = Column(Geometry(geometry_type="POINT", srid=4326), nullable=False)

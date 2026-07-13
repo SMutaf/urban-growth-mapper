@@ -8,15 +8,16 @@ from app.domain.scoring.scoring_context import ScoringContext
 # junction/exit) is a noise/severance disamenity, significant only very
 # close-in and fading within a couple hundred metres. Distinct from
 # HighwayJunctionAccessContributor, which scores distance to the nearest
-# interchange and is positive at moderate distance.
-NOISE_BAND = [(0.0, -0.3), (0.2, 0.0)]
+# interchange and is positive at moderate distance. -30% right on the
+# shoulder, neutral by 200m.
+NOISE_BAND = [(0.0, 0.7), (0.2, 1.0)]
 
 
 class HighwayNoiseContributor:
     def contribute(self, region: Region, context: ScoringContext) -> float:
-        highways = [p for p in context.projects if p.project_type == ProjectType.HIGHWAY]
+        highways = context.projects_by_type(ProjectType.HIGHWAY)
         if not highways:
-            return 0.0
+            return 1.0
         nearest_km = min(
             haversine_distance_km(region.center_lat, region.center_lon, p.latitude, p.longitude)
             for p in highways

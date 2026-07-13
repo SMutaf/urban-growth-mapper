@@ -12,8 +12,8 @@ export function fetchProjects(city) {
   return request(`/projects?city=${encodeURIComponent(city)}`)
 }
 
-export function fetchHeatmap(city) {
-  return request(`/heatmap?city=${encodeURIComponent(city)}`)
+export function fetchHeatmap(city, profile = 'balanced') {
+  return request(`/heatmap?city=${encodeURIComponent(city)}&profile=${encodeURIComponent(profile)}`)
 }
 
 export function fetchPointsOfInterest(city) {
@@ -28,4 +28,8 @@ export function fetchDistrictBoundary(city, districtName) {
   return request(
     `/districts/${encodeURIComponent(districtName)}/boundary?city=${encodeURIComponent(city)}`,
   )
+}
+
+export function fetchRoadGeometries(city) {
+  return request(`/road-geometries?city=${encodeURIComponent(city)}`)
 }

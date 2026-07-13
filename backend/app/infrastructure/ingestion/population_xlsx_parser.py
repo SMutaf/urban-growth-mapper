@@ -70,9 +70,31 @@ def compute_growth_rate(timeseries: List[Tuple[int, int]]) -> float:
     """Compound annual growth rate (CAGR) between the first and last data point."""
     if len(timeseries) < 2:
         raise ValueError("Need at least two data points to compute a growth rate")
-    first_year, first_population = timeseries[0]
-    last_year, last_population = timeseries[-1]
-    years_elapsed = last_year - first_year
-    if years_elapsed <= 0 or first_population <= 0:
+    return _cagr(timeseries[0], timeseries[-1])
+
+
+def compute_momentum(timeseries: List[Tuple[int, int]]) -> float:
+    """Recent-half CAGR minus whole-series CAGR: positive means growth has
+    been accelerating lately relative to the district's own longer-run
+    average (a "coming up" signal), negative means it's decelerating (was
+    hot, has since cooled) - a flat CAGR alone can't distinguish the two,
+    which is exactly the "already fully grown" vs "growing right now"
+    ambiguity a growth-direction heatmap needs to resolve. Needs at least 4
+    points so the recent half is itself at least 2 points; shorter series
+    return 0.0 (no basis for a momentum read yet).
+    """
+    if len(timeseries) < 4:
+        return 0.0
+    overall_rate = _cagr(timeseries[0], timeseries[-1])
+    recent_half = timeseries[len(timeseries) // 2 :]
+    recent_rate = _cagr(recent_half[0], recent_half[-1])
+    return recent_rate - overall_rate
+
+
+def _cagr(start: Tuple[int, int], end: Tuple[int, int]) -> float:
+    start_year, start_population = start
+    end_year, end_population = end
+    years_elapsed = end_year - start_year
+    if years_elapsed <= 0 or start_population <= 0:
         raise ValueError("Invalid timeseries for CAGR computation")
-    return (last_population / first_population) ** (1 / years_elapsed) - 1
+    return (end_population / start_population) ** (1 / years_elapsed) - 1

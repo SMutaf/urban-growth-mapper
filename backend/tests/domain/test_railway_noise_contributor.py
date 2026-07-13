@@ -11,22 +11,22 @@ def _railway(lat=40.0, lon=30.0):
     )
 
 
-def test_right_next_to_line_is_negative():
+def test_right_next_to_line_is_penalised():
     contributor = RailwayNoiseContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[_railway()])) < 0
+    assert contributor.contribute(region, ScoringContext(projects=[_railway()])) < 1.0
 
 
 def test_far_from_line_has_no_penalty():
     contributor = RailwayNoiseContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=41.0, center_lon=31.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[_railway()])) == 0.0
+    assert contributor.contribute(region, ScoringContext(projects=[_railway()])) == 1.0
 
 
-def test_no_railways_yields_zero():
+def test_no_railways_yields_neutral_multiplier():
     contributor = RailwayNoiseContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(projects=[])) == 1.0

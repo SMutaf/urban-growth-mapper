@@ -11,15 +11,15 @@ def _highway(lat=40.0, lon=30.0):
     )
 
 
-def test_right_next_to_highway_is_negative():
+def test_right_next_to_highway_is_penalised():
     contributor = HighwayNoiseContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[_highway()])) < 0
+    assert contributor.contribute(region, ScoringContext(projects=[_highway()])) < 1.0
 
 
 def test_far_from_highway_has_no_penalty():
     contributor = HighwayNoiseContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=41.0, center_lon=31.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[_highway()])) == 0.0
+    assert contributor.contribute(region, ScoringContext(projects=[_highway()])) == 1.0

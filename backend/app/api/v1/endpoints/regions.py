@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.api.deps import get_region_service
 from app.application.services.region_service import RegionService
-from app.core.city_bounds import CITY_BOUNDING_BOXES
+from app.core.city_bounds import CITY_BOUNDING_BOXES, load_city_boundary
 
 router = APIRouter()
 
@@ -32,4 +32,5 @@ def generate_regions(
     bbox = CITY_BOUNDING_BOXES.get(city.lower())
     if bbox is None:
         raise HTTPException(status_code=404, detail=f"No bounding box configured for city '{city}'")
-    return service.generate_regions(city, bbox, cell_size_km)
+    boundary = load_city_boundary(city.lower())
+    return service.generate_regions(city, bbox, cell_size_km, boundary=boundary)

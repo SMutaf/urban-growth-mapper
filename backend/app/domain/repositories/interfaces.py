@@ -1,10 +1,18 @@
-from typing import List, Optional, Protocol
+from dataclasses import dataclass
+from typing import List, Optional, Protocol, Tuple
 
 from app.domain.entities.district import District
 from app.domain.entities.hazard_zone import HazardZone
+from app.domain.entities.land_cover import LandCoverCell
 from app.domain.entities.point_of_interest import PointOfInterest
 from app.domain.entities.project import Project
 from app.domain.entities.region import Region
+
+
+@dataclass
+class DistrictGrowthStats:
+    growth_rate: float
+    growth_momentum: float
 
 
 class IProjectRepository(Protocol):
@@ -46,8 +54,40 @@ class IDistrictDemographicsRepository(Protocol):
     scripts/ingest_sakarya_population.py).
     """
 
-    def find_growth_rate_for_point(self, city: str, lat: float, lon: float) -> Optional[float]:
+    def find_growth_rates_for_points(
+        self, city: str, points: List[Tuple[float, float]]
+    ) -> List[Optional[DistrictGrowthStats]]:
+        """Batched point-in-polygon lookup: one DistrictGrowthStats (or None)
+        per (lat, lon) in `points`, same order. Batched rather than one point
+        at a time because a heatmap request can involve thousands of
+        regions - a per-point DB round trip dominates response time at fine
+        grid resolutions.
+        """
         ...
 
     def list_districts(self, city: str) -> List[District]:
+        ...
+
+    def list_growth_centroids(self, city: str) -> List[Tuple[float, float, float]]:
+        """One (lat, lon, growth_rate) per mahalle polygon centroid - the
+        raw material for a directional growth analysis (which geographic
+        direction from the city center is growing fastest), as distinct
+        from find_growth_rates_for_points which answers "what's the growth
+        rate at this exact point".
+        """
+        ...
+
+
+class ILandCoverRepository(Protocol):
+    """Pre-aggregated building-density readings (see
+    app/domain/entities/land_cover.py) - bulk_replace rather than add(),
+    since ingestion regenerates the whole city's density grid each run
+    (same clear-then-bulk-insert idiom as IDistrictDemographicsRepository's
+    ingestion path).
+    """
+
+    def list_by_city(self, city: str) -> List[LandCoverCell]:
+        ...
+
+    def bulk_replace(self, city: str, cells: List[LandCoverCell]) -> None:
         ...

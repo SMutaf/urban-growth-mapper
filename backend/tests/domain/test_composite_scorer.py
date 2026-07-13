@@ -59,10 +59,65 @@ def test_hazard_zone_lowers_score_relative_to_no_hazard():
     assert raw_with < raw_without
 
 
-def test_empty_context_yields_zero_scores():
+def test_empty_context_yields_neutral_raw_score():
+    # Every contributor returns 1.0 (neutral) with nothing nearby, so the
+    # product of an all-neutral context is 1.0, not 0.0 - see
+    # contributors/interfaces.py for why a contributor must never return 0.
     scorer = _scorer()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
     scores = scorer.score_regions([region], ScoringContext())
 
-    assert scores[0].raw_score == 0.0
+    assert scores[0].raw_score == 1.0
+
+
+def test_zero_weight_neutralizes_a_contributor():
+    hospital = PointOfInterest(
+        id=1, name="Hastane", category=POICategory.HOSPITAL, status=ProjectStatus.COMPLETED,
+        city="sakarya", latitude=40.0, longitude=30.0,
+    )
+    region = Region(id=1, name="r", city="sakarya", center_lat=40.001, center_lon=30.001)
+    context = ScoringContext(points_of_interest=[hospital])
+
+    full_weight = CompositeHeatmapScorer([PoiProximityContributor()], weights=[1.0])
+    zero_weight = CompositeHeatmapScorer([PoiProximityContributor()], weights=[0.0])
+
+    full_score = full_weight.score_regions([region], context)[0].raw_score
+    zeroed_score = zero_weight.score_regions([region], context)[0].raw_score
+
+    assert full_score > 1.0
+    assert zeroed_score == 1.0
+
+
+def test_higher_weight_amplifies_a_contributors_effect():
+    hospital = PointOfInterest(
+        id=1, name="Hastane", category=POICategory.HOSPITAL, status=ProjectStatus.COMPLETED,
+        city="sakarya", latitude=40.0, longitude=30.0,
+    )
+    region = Region(id=1, name="r", city="sakarya", center_lat=40.001, center_lon=30.001)
+    context = ScoringContext(points_of_interest=[hospital])
+
+    normal = CompositeHeatmapScorer([PoiProximityContributor()], weights=[1.0])
+    amplified = CompositeHeatmapScorer([PoiProximityContributor()], weights=[2.0])
+
+    normal_score = normal.score_regions([region], context)[0].raw_score
+    amplified_score = amplified.score_regions([region], context)[0].raw_score
+
+    assert amplified_score > normal_score
+
+
+def test_omitting_weights_matches_all_weights_equal_to_one():
+    hospital = PointOfInterest(
+        id=1, name="Hastane", category=POICategory.HOSPITAL, status=ProjectStatus.COMPLETED,
+        city="sakarya", latitude=40.0, longitude=30.0,
+    )
+    region = Region(id=1, name="r", city="sakarya", center_lat=40.001, center_lon=30.001)
+    context = ScoringContext(points_of_interest=[hospital])
+
+    no_weights_arg = CompositeHeatmapScorer([PoiProximityContributor()])
+    explicit_weights = CompositeHeatmapScorer([PoiProximityContributor()], weights=[1.0])
+
+    assert (
+        no_weights_arg.score_regions([region], context)[0].raw_score
+        == explicit_weights.score_regions([region], context)[0].raw_score
+    )

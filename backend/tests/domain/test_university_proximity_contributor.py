@@ -24,22 +24,22 @@ def test_close_to_university_beats_far_away():
     assert close > far
 
 
-def test_right_at_university_is_positive():
+def test_right_at_university_is_boosted():
     contributor = UniversityProximityContributor()
     context = ScoringContext(points_of_interest=[UNIVERSITY])
 
-    assert contributor.contribute(_region_at_km_offset(0.0), context) > 0
+    assert contributor.contribute(_region_at_km_offset(0.0), context) > 1.0
 
 
 def test_beyond_range_has_no_effect():
     contributor = UniversityProximityContributor()
     context = ScoringContext(points_of_interest=[UNIVERSITY])
 
-    assert contributor.contribute(_region_at_km_offset(6.0), context) == 0.0
+    assert contributor.contribute(_region_at_km_offset(6.0), context) == 1.0
 
 
-def test_no_universities_yields_zero():
+def test_no_universities_yields_neutral_multiplier():
     contributor = UniversityProximityContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(points_of_interest=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(points_of_interest=[])) == 1.0

@@ -1,7 +1,7 @@
 import L from 'leaflet'
-import 'leaflet.heat'
 import 'leaflet.markercluster'
 import { useEffect, useRef } from 'react'
+import { buildHeatmapRaster } from '../heatmapRaster.js'
 
 const PROJECT_TYPE_LABELS = {
   highway: 'Otoban',
@@ -57,6 +57,8 @@ export default function MapView({
   heatmapPoints,
   center,
   highlightedBoundary,
+  roadFeatures = [],
+  highlightedRoad,
   layers,
 }) {
   const mapContainerRef = useRef(null)
@@ -67,10 +69,19 @@ export default function MapView({
   const schoolLayerRef = useRef(null)
   const otherPoiLayerRef = useRef(null)
   const boundaryLayerRef = useRef(null)
+  const roadLinesLayerRef = useRef(null)
+  const railwayLinesLayerRef = useRef(null)
+  const highlightedRoadLayerRef = useRef(null)
 
   useEffect(() => {
     if (mapRef.current) return
-    const map = L.map(mapContainerRef.current).setView(center, 12)
+    // Zoom 12 crops tightly to the urban core, where every region already
+    // scores in the province's top ~10% - the color scale (calibrated to
+    // the whole province) reads as uniformly "hot" there no matter how
+    // it's tuned, hiding the real cold-to-hot gradient that's actually
+    // visible a bit further out. Starting more zoomed out shows that
+    // gradient immediately instead of requiring the user to zoom out first.
+    const map = L.map(mapContainerRef.current).setView(center, 10)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap katkıda bulunanlar',
     }).addTo(map)
@@ -79,6 +90,9 @@ export default function MapView({
     schoolLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
     otherPoiLayerRef.current = L.layerGroup()
     boundaryLayerRef.current = L.layerGroup().addTo(map)
+    roadLinesLayerRef.current = L.layerGroup()
+    railwayLinesLayerRef.current = L.layerGroup()
+    highlightedRoadLayerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
 
     return () => {
@@ -97,26 +111,34 @@ export default function MapView({
       heatLayerRef.current = null
     }
     if (layers.heatmap && heatmapPoints && heatmapPoints.length > 0) {
-      const heatData = heatmapPoints.map((p) => [p.center_lat, p.center_lon, p.score])
-      heatLayerRef.current = L.heatLayer(heatData, { radius: 35, blur: 25, maxZoom: 14 }).addTo(map)
+      const raster = buildHeatmapRaster(heatmapPoints)
+      if (raster) {
+        heatLayerRef.current = L.imageOverlay(raster.dataUrl, raster.bounds, {
+          opacity: 0.8,
+          interactive: false,
+        }).addTo(map)
+      }
     }
   }, [heatmapPoints, layers.heatmap])
 
-  // Projects: populate markers
+  // Projects: populate markers (highways/railways render as lines instead -
+  // see the road/railway line effects below - so they're excluded here)
   useEffect(() => {
     const layerGroup = markersLayerRef.current
     if (!layerGroup) return
     layerGroup.clearLayers()
-    projects.forEach((project) => {
-      L.marker([project.latitude, project.longitude])
-        .bindTooltip(project.name, { direction: 'top', sticky: true })
-        .bindPopup(
-          `<strong>${project.name}</strong><br/>${
-            PROJECT_TYPE_LABELS[project.project_type] || project.project_type
-          }<br/>${project.status}`,
-        )
-        .addTo(layerGroup)
-    })
+    projects
+      .filter((project) => project.project_type !== 'highway' && project.project_type !== 'railway')
+      .forEach((project) => {
+        L.marker([project.latitude, project.longitude])
+          .bindTooltip(project.name, { direction: 'top', sticky: true })
+          .bindPopup(
+            `<strong>${project.name}</strong><br/>${
+              PROJECT_TYPE_LABELS[project.project_type] || project.project_type
+            }<br/>${project.status}`,
+          )
+          .addTo(layerGroup)
+      })
   }, [projects])
 
   // Projects: visibility
@@ -130,6 +152,80 @@ export default function MapView({
       map.removeLayer(layerGroup)
     }
   }, [layers.projects])
+
+  // Road/railway lines: populate (real OSM line geometry - see
+  // backend/app/domain/entities/road_geometry.py - independent of the
+  // single-point Project rows used for scoring, which are unaffected)
+  useEffect(() => {
+    const roadGroup = roadLinesLayerRef.current
+    const railwayGroup = railwayLinesLayerRef.current
+    if (!roadGroup || !railwayGroup) return
+    roadGroup.clearLayers()
+    railwayGroup.clearLayers()
+
+    const bindPopup = (layer, feature) => {
+      layer
+        .bindTooltip(feature.properties.name, { sticky: true })
+        .bindPopup(
+          `<strong>${feature.properties.name}</strong><br/>${
+            PROJECT_TYPE_LABELS[feature.properties.project_type] || feature.properties.project_type
+          }`,
+        )
+    }
+
+    L.geoJSON(
+      { type: 'FeatureCollection', features: roadFeatures.filter((f) => f.properties.project_type === 'highway') },
+      { style: { color: '#2563eb', weight: 3 }, onEachFeature: (feature, layer) => bindPopup(layer, feature) },
+    ).addTo(roadGroup)
+
+    L.geoJSON(
+      { type: 'FeatureCollection', features: roadFeatures.filter((f) => f.properties.project_type === 'railway') },
+      {
+        style: { color: '#6b7280', weight: 2, dashArray: '6 4' },
+        onEachFeature: (feature, layer) => bindPopup(layer, feature),
+      },
+    ).addTo(railwayGroup)
+  }, [roadFeatures])
+
+  // Road lines: visibility
+  useEffect(() => {
+    const map = mapRef.current
+    const layerGroup = roadLinesLayerRef.current
+    if (!map || !layerGroup) return
+    if (layers.roads) {
+      map.addLayer(layerGroup)
+    } else {
+      map.removeLayer(layerGroup)
+    }
+  }, [layers.roads])
+
+  // Railway lines: visibility
+  useEffect(() => {
+    const map = mapRef.current
+    const layerGroup = railwayLinesLayerRef.current
+    if (!map || !layerGroup) return
+    if (layers.railways) {
+      map.addLayer(layerGroup)
+    } else {
+      map.removeLayer(layerGroup)
+    }
+  }, [layers.railways])
+
+  // Highlighted road/railway (from the search panel)
+  useEffect(() => {
+    const map = mapRef.current
+    const layerGroup = highlightedRoadLayerRef.current
+    if (!map || !layerGroup) return
+    layerGroup.clearLayers()
+    if (!highlightedRoad) return
+
+    const geoJsonLayer = L.geoJSON(highlightedRoad, { style: { color: '#facc15', weight: 5 } })
+    geoJsonLayer.addTo(layerGroup)
+    const bounds = geoJsonLayer.getBounds()
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [40, 40] })
+    }
+  }, [highlightedRoad])
 
   // POIs: split into bus stops / schools / other, populate each group
   useEffect(() => {

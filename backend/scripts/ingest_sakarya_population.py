@@ -37,6 +37,7 @@ from app.infrastructure.ingestion.mahalle_geojson_parser import (  # noqa: E402
 )
 from app.infrastructure.ingestion.population_xlsx_parser import (  # noqa: E402
     compute_growth_rate,
+    compute_momentum,
     parse_population_timeseries,
 )
 from app.infrastructure.persistence.database import SessionLocal  # noqa: E402
@@ -55,9 +56,10 @@ MIN_PREFIX_MATCH_LENGTH = 4
 
 
 def fetch_district_stats(client: CkanClient) -> dict:
-    """Returns {normalized_district_name: (growth_rate, population, year)}
-    discovered from every per-district total-population dataset on the
-    portal - growth_rate is the CAGR over the full timeseries, population/
+    """Returns {normalized_district_name: (growth_rate, momentum, population,
+    year)} discovered from every per-district total-population dataset on
+    the portal - growth_rate is the CAGR over the full timeseries, momentum
+    is the recent-half CAGR minus that (see compute_momentum), population/
     year are the most recent data point.
     """
     stats = {}
@@ -78,13 +80,22 @@ def fetch_district_stats(client: CkanClient) -> dict:
         try:
             timeseries = parse_population_timeseries(xlsx_bytes)
             growth_rate = compute_growth_rate(timeseries)
+            momentum = compute_momentum(timeseries)
         except ValueError as exc:
             print(f"  skip '{district_name}': {exc}")
             continue
 
         latest_year, latest_population = timeseries[-1]
-        stats[normalize_district_name(district_name)] = (growth_rate, latest_population, latest_year)
-        print(f"  {district_name}: {latest_population:,} ({latest_year}), {growth_rate:+.4%}/yil")
+        stats[normalize_district_name(district_name)] = (
+            growth_rate,
+            momentum,
+            latest_population,
+            latest_year,
+        )
+        print(
+            f"  {district_name}: {latest_population:,} ({latest_year}), "
+            f"{growth_rate:+.4%}/yil (momentum {momentum:+.4%})"
+        )
 
     return stats
 
@@ -138,11 +149,12 @@ def ingest() -> None:
         if district_stats is None:
             unmatched_districts.add(mahalle.district_name)
             continue
-        growth_rate, population, population_year = district_stats
+        growth_rate, momentum, population, population_year = district_stats
         matched_records.append(
             MahalleRecord(
                 district_name=mahalle.district_name,
                 growth_rate=growth_rate,
+                growth_momentum=momentum,
                 population=population,
                 population_year=population_year,
                 geometry=mahalle.geometry,
@@ -155,7 +167,9 @@ def ingest() -> None:
 
     session = SessionLocal()
     try:
-        SqlAlchemyDistrictBoundaryRepository(session).bulk_insert(CITY, matched_records)
+        repo = SqlAlchemyDistrictBoundaryRepository(session)
+        repo.clear_city(CITY)
+        repo.bulk_insert(CITY, matched_records)
     finally:
         session.close()
 

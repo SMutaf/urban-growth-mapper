@@ -23,11 +23,11 @@ def test_region_closer_to_project_scores_higher():
     assert contributor.contribute(near_region, context) > contributor.contribute(far_region, context)
 
 
-def test_no_projects_yields_zero_contribution():
+def test_no_projects_yields_neutral_multiplier():
     contributor = ProjectProximityContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(projects=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(projects=[])) == 1.0
 
 
 def test_planned_project_contributes_less_than_completed():
@@ -68,4 +68,4 @@ def test_railway_and_highway_are_excluded_now_handled_by_specialized_contributor
         region, ScoringContext(projects=[railway, highway, industrial])
     )
 
-    assert contribution == 0.0
+    assert contribution == 1.0

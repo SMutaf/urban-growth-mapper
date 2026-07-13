@@ -23,11 +23,11 @@ def test_region_closer_to_poi_scores_higher():
     assert contributor.contribute(near_region, context) > contributor.contribute(far_region, context)
 
 
-def test_no_pois_yields_zero_contribution():
+def test_no_pois_yields_neutral_multiplier():
     contributor = PoiProximityContributor()
     region = Region(id=1, name="r", city="sakarya", center_lat=40.0, center_lon=30.0)
 
-    assert contributor.contribute(region, ScoringContext(points_of_interest=[])) == 0.0
+    assert contributor.contribute(region, ScoringContext(points_of_interest=[])) == 1.0
 
 
 def test_metro_station_weighted_higher_than_bus_stop():
