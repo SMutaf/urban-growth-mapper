@@ -16,13 +16,23 @@ const LAND_USE_PROFILE_OPTIONS = [
 ]
 
 // Schools/hospitals/bus stops have their own quick-toggle chips in
-// TopSearchBar - not repeated here, see App.jsx's layers state.
+// TopSearchBar - not repeated here, see App.jsx's layers state. Every other
+// POI category gets its own checkbox (see MapView.jsx's
+// CATEGORY_LAYER_KEYS) instead of one shared "diğer noktalar" catch-all.
 const LAYER_OPTIONS = [
   { key: 'heatmap', label: 'Isı Haritası' },
   { key: 'projects', label: 'Projeler (OSB, Liman)' },
   { key: 'roads', label: 'Yollar (Otoban/Devlet Yolu, çizgi)' },
   { key: 'railways', label: 'Demiryolları (çizgi)' },
-  { key: 'otherPois', label: 'Diğer Noktalar (Üniversite, Kavşak vb.)' },
+  { key: 'universities', label: 'Üniversiteler' },
+  { key: 'highwayJunctions', label: 'Otoyol Kavşakları' },
+  { key: 'metroStations', label: 'Metro İstasyonları' },
+  { key: 'trainStations', label: 'Tren İstasyonları' },
+  { key: 'shoppingCenters', label: 'Çarşı / AVM' },
+  { key: 'cityCenters', label: 'Şehir Merkezi' },
+  { key: 'cemeteries', label: 'Mezarlıklar' },
+  { key: 'prisons', label: 'Cezaevleri' },
+  { key: 'landfills', label: 'Çöp Sahaları' },
 ]
 
 export default function FilterDrawer({

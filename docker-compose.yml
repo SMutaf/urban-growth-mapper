@@ -12,6 +12,53 @@ services:
       - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      # db:5432 (the compose service name + its *container* port), not
+      # localhost:5433 - only reachable that way from inside the compose
+      # network. Override with a real key in a .env file next to this
+      # compose file (docker compose reads it automatically) to enable
+      # geocoding/search and the advisory chat's optional data lookups.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/urban_growth_mapper
+      CORS_ORIGINS: '["http://localhost:5173"]'
+      GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
+      # host.docker.internal lets the container reach an Ollama instance
+      # running on the host machine (Docker Desktop on Windows/Mac resolves
+      # this automatically) - the advisory chat feature is fully optional
+      # and degrades to a clear "unavailable" error if nothing's listening
+      # there, see advisory_llm_enabled below to turn it off entirely.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      ADVISORY_LLM_ENABLED: ${ADVISORY_LLM_ENABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      # The browser (not the container) makes these requests, so this must
+      # be a host-reachable URL, not the "backend" compose service name.
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   db_data:

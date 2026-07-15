@@ -2,6 +2,7 @@ import L from 'leaflet'
 import 'leaflet.markercluster'
 import { useEffect, useRef } from 'react'
 import { buildHeatmapRaster } from '../heatmapRaster.js'
+import { categoryMarkerIcon } from '../mapMarkerIcons.js'
 
 const PROJECT_TYPE_LABELS = {
   highway: 'Otoban',
@@ -21,7 +22,33 @@ const POI_CATEGORY_LABELS = {
   shopping_center: 'Çarşı / AVM',
   school: 'Okul',
   city_center: 'Şehir Merkezi',
+  prison: 'Cezaevi',
+  landfill: 'Çöp Sahası',
+  cemetery: 'Mezarlık',
   other: 'Diğer',
+}
+
+// Every POI category that isn't bus_stop/school/hospital (those get their
+// own dedicated groups below, and their own quick-toggle chips in
+// TopSearchBar) - each gets its own layer group + FilterDrawer checkbox,
+// keyed by CATEGORY_LAYER_KEYS instead of one shared "diğer noktalar"
+// catch-all.
+const OTHER_POI_CATEGORIES = [
+  'metro_station', 'train_station', 'highway_junction', 'university',
+  'shopping_center', 'city_center', 'prison', 'landfill', 'cemetery',
+]
+
+// POI category -> the App.jsx `layers` state key that toggles its visibility.
+export const CATEGORY_LAYER_KEYS = {
+  metro_station: 'metroStations',
+  train_station: 'trainStations',
+  highway_junction: 'highwayJunctions',
+  university: 'universities',
+  shopping_center: 'shoppingCenters',
+  city_center: 'cityCenters',
+  prison: 'prisons',
+  landfill: 'landfills',
+  cemetery: 'cemeteries',
 }
 
 // Names osm_feature_parser.py falls back to when OSM had no `name` tag for
@@ -37,12 +64,8 @@ function poiPopupHtml(poi, isGeneric) {
 
 function poiCircleMarker(poi) {
   const isGeneric = GENERIC_POI_NAMES.has(poi.name)
-  return L.circleMarker([poi.latitude, poi.longitude], {
-    radius: 7,
-    color: isGeneric ? '#9ca3af' : '#0f766e',
-    fillColor: isGeneric ? '#e5e7eb' : '#14b8a6',
-    fillOpacity: isGeneric ? 0.5 : 0.9,
-    weight: 2,
+  return L.marker([poi.latitude, poi.longitude], {
+    icon: categoryMarkerIcon(poi.category, { generic: isGeneric }),
   })
     .bindTooltip(isGeneric ? `${poi.name} (isim dogrulanmadi)` : poi.name, {
       direction: 'top',
@@ -73,7 +96,9 @@ export default function MapView({
   const busStopLayerRef = useRef(null)
   const schoolLayerRef = useRef(null)
   const hospitalLayerRef = useRef(null)
-  const otherPoiLayerRef = useRef(null)
+  // category -> L.layerGroup(), one per OTHER_POI_CATEGORIES entry - built
+  // once in the init effect below.
+  const otherPoiGroupsRef = useRef(new Map())
   const boundaryLayerRef = useRef(null)
   const roadLinesLayerRef = useRef(null)
   const railwayLinesLayerRef = useRef(null)
@@ -102,7 +127,9 @@ export default function MapView({
     busStopLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
     schoolLayerRef.current = L.markerClusterGroup({ maxClusterRadius: 50 })
     hospitalLayerRef.current = L.layerGroup()
-    otherPoiLayerRef.current = L.layerGroup()
+    OTHER_POI_CATEGORIES.forEach((category) => {
+      otherPoiGroupsRef.current.set(category, L.layerGroup())
+    })
     boundaryLayerRef.current = L.layerGroup().addTo(map)
     roadLinesLayerRef.current = L.layerGroup()
     railwayLinesLayerRef.current = L.layerGroup()
@@ -181,7 +208,9 @@ export default function MapView({
     projects
       .filter((project) => project.project_type !== 'highway' && project.project_type !== 'railway')
       .forEach((project) => {
-        L.marker([project.latitude, project.longitude])
+        L.marker([project.latitude, project.longitude], {
+          icon: categoryMarkerIcon(project.project_type),
+        })
           .bindTooltip(project.name, { direction: 'top', sticky: true })
           .bindPopup(
             `<strong>${project.name}</strong><br/>${
@@ -301,17 +330,18 @@ export default function MapView({
     map.setView([highlightedPoi.latitude, highlightedPoi.longitude], 15)
   }, [highlightedPoi])
 
-  // POIs: split into bus stops / schools / hospitals / other, populate each group
+  // POIs: split into bus stops / schools / hospitals / one group per other
+  // category (OTHER_POI_CATEGORIES), populate each group
   useEffect(() => {
     const busStopGroup = busStopLayerRef.current
     const schoolGroup = schoolLayerRef.current
     const hospitalGroup = hospitalLayerRef.current
-    const otherGroup = otherPoiLayerRef.current
-    if (!busStopGroup || !schoolGroup || !hospitalGroup || !otherGroup) return
+    const otherGroups = otherPoiGroupsRef.current
+    if (!busStopGroup || !schoolGroup || !hospitalGroup || otherGroups.size === 0) return
     busStopGroup.clearLayers()
     schoolGroup.clearLayers()
     hospitalGroup.clearLayers()
-    otherGroup.clearLayers()
+    otherGroups.forEach((group) => group.clearLayers())
     pointsOfInterest.forEach((poi) => {
       const marker = poiCircleMarker(poi)
       if (poi.category === 'bus_stop') {
@@ -321,7 +351,7 @@ export default function MapView({
       } else if (poi.category === 'hospital') {
         hospitalGroup.addLayer(marker)
       } else {
-        marker.addTo(otherGroup)
+        otherGroups.get(poi.category)?.addLayer(marker)
       }
     })
   }, [pointsOfInterest])
@@ -360,16 +390,22 @@ export default function MapView({
     }
   }, [layers.hospitals])
 
+  // Other POI categories: each toggles independently via its own
+  // FilterDrawer checkbox (see CATEGORY_LAYER_KEYS) instead of one shared
+  // "diğer noktalar" catch-all.
   useEffect(() => {
     const map = mapRef.current
-    const otherGroup = otherPoiLayerRef.current
-    if (!map || !otherGroup) return
-    if (layers.otherPois) {
-      map.addLayer(otherGroup)
-    } else {
-      map.removeLayer(otherGroup)
-    }
-  }, [layers.otherPois])
+    const otherGroups = otherPoiGroupsRef.current
+    if (!map || otherGroups.size === 0) return
+    OTHER_POI_CATEGORIES.forEach((category) => {
+      const group = otherGroups.get(category)
+      if (layers[CATEGORY_LAYER_KEYS[category]]) {
+        map.addLayer(group)
+      } else {
+        map.removeLayer(group)
+      }
+    })
+  }, [layers])
 
   useEffect(() => {
     const map = mapRef.current

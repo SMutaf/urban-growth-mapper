@@ -17,20 +17,39 @@ import TopSearchBar from './components/TopSearchBar.jsx'
 const CITY = 'sakarya'
 const SAKARYA_CENTER = [40.7569, 30.3781]
 
+// Every POI-driven layer key - used both for initial state and to know
+// which layers.* keys should trigger the lazy pointsOfInterest fetch below
+// (heatmap/projects/roads/railways don't come from that endpoint).
+const POI_LAYER_KEYS = [
+  'busStops', 'schools', 'hospitals',
+  'metroStations', 'trainStations', 'highwayJunctions', 'universities',
+  'shoppingCenters', 'cityCenters', 'cemeteries', 'prisons', 'landfills',
+]
+
 const INITIAL_LAYERS = {
   heatmap: true,
   projects: true,
   roads: true,
   railways: true,
-  // Bus stops (2600+), schools (683), and hospitals are only fetched once
-  // switched on - loading them eagerly on every page visit was the
-  // reported perf issue. Schools/hospitals are separately available for
-  // search via searchablePois below (a small, always-eager dataset), which
-  // is independent of whether their map markers are actually rendered yet.
+  // Bus stops (2600+) and schools (683) are only fetched once switched on -
+  // loading them eagerly on every page visit was the reported perf issue.
+  // Schools/hospitals are separately available for search via
+  // searchablePois below (a small, always-eager dataset), independent of
+  // whether their map markers are actually rendered yet. The remaining
+  // categories are few enough (single digits to ~80) to default visible,
+  // each with its own checkbox now instead of one shared "diğer noktalar".
   busStops: false,
   schools: false,
   hospitals: false,
-  otherPois: true,
+  metroStations: true,
+  trainStations: true,
+  highwayJunctions: true,
+  universities: true,
+  shoppingCenters: true,
+  cityCenters: true,
+  cemeteries: true,
+  prisons: true,
+  landfills: true,
 }
 
 export default function App() {
@@ -87,11 +106,11 @@ export default function App() {
   }, [landUseProfile])
 
   useEffect(() => {
-    const needsPois = layers.busStops || layers.schools || layers.hospitals || layers.otherPois
+    const needsPois = POI_LAYER_KEYS.some((key) => layers[key])
     if (!needsPois || poisRequested) return
     setPoisRequested(true)
     fetchPointsOfInterest(CITY).then(setPointsOfInterest).catch((err) => setError(err.message))
-  }, [layers.busStops, layers.schools, layers.hospitals, layers.otherPois, poisRequested])
+  }, [layers, poisRequested])
 
   const handleToggleLayer = (key) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }))

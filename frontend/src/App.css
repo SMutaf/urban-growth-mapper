@@ -7,6 +7,14 @@ body,
   width: 100%;
 }
 
+/* Leaflet's default .leaflet-div-icon adds a white box+border - our
+   category marker badges (mapMarkerIcons.js) draw their own circular
+   badge, so strip Leaflet's default chrome for this class. */
+.category-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 .error-banner {
   position: absolute;
   z-index: 1000;
